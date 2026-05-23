@@ -39,8 +39,10 @@ import {
 import { setXpFromServer } from '@/redux/slice/economySlice';
 import {
   finalizeCoachSession,
+  getTranscriptText,
   initCoachSession,
   loadPendingCoach,
+  savePendingCoach,
 } from '@/lib/sessionTranscript';
 import type { DebateOutcome } from '@/types';
 import type { MatchRequest } from '@/types';
@@ -199,10 +201,15 @@ function bindSocketListeners(
         });
         pending = loadPendingCoach();
       }
+      if (pending && pending.analysisStatus === 'error' && getTranscriptText(pending)) {
+        pending.analysisStatus = 'idle';
+        pending.analysisError = undefined;
+        savePendingCoach(pending);
+      }
       const duration =
         pending && pending.startedAt
           ? Math.max(1, Math.round((Date.now() - pending.startedAt) / 1000))
-          : 300;
+          : 60;
       finalizeCoachSession(sid, duration);
     }
 

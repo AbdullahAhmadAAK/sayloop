@@ -1,18 +1,43 @@
+import { useState } from 'react';
 import { useAppDispatch, useAppSelector } from '@/hooks/useAppDispatch';
 import { useSessionRoom } from '@/hooks/useSessionRoom';
-import { useSpeechCapture } from '@/hooks/useSpeechCapture';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { toggleCamera, toggleMute } from '@/redux/slice/sessionSlice';
 import VideoArea from '@/components/modules/sessions/VideoArea';
 import ConversationPanel from '@/components/modules/sessions/ConversationPanel';
 import ControlBar from '@/components/modules/sessions/ControlBar';
+import { DrawOfferModal, ResignModal } from '@/components/modules/sessions/SessionActionModals';
 
 export default function SessionScreen() {
   const dispatch = useAppDispatch();
   const session = useAppSelector((s) => s.session);
   const { offerDraw, acceptDraw, declineDraw, resign } = useSessionRoom();
-  const { localVideoRef, remoteVideoRef, remoteStream, partnerConnected } = useWebRTC();
-  useSpeechCapture(session.phase === 'active', session.sessionId);
+  const { localVideoRef, remoteVideoRef, remoteStream, partnerConnected, connecting } =
+    useWebRTC();
+  const [drawModalOpen, setDrawModalOpen] = useState(false);
+  const [resignModalOpen, setResignModalOpen] = useState(false);
+  const [drawLoading, setDrawLoading] = useState(false);
+  const [resignLoading, setResignLoading] = useState(false);
+
+  const handleOfferDraw = async () => {
+    setDrawLoading(true);
+    try {
+      await offerDraw();
+      setDrawModalOpen(false);
+    } finally {
+      setDrawLoading(false);
+    }
+  };
+
+  const handleResign = async () => {
+    setResignLoading(true);
+    try {
+      await resign();
+      setResignModalOpen(false);
+    } finally {
+      setResignLoading(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 pb-8">
@@ -24,6 +49,7 @@ export default function SessionScreen() {
         partnerName={session.partnerName}
         mediaError={session.mediaError}
         partnerConnected={partnerConnected}
+        connecting={connecting}
         hasRemoteStream={Boolean(remoteStream)}
       />
       <ConversationPanel topic={session.topic} timerSeconds={session.timerSeconds} />
@@ -36,24 +62,21 @@ export default function SessionScreen() {
         onToggleCamera={() => dispatch(toggleCamera())}
         onAcceptDraw={acceptDraw}
         onDeclineDraw={declineDraw}
-        onOfferDraw={() => {
-          if (
-            window.confirm(
-              'Offer a draw? If your partner accepts, you both get +25 XP.',
-            )
-          ) {
-            offerDraw();
-          }
-        }}
-        onResign={() => {
-          if (
-            window.confirm(
-              'Resign this debate? Your opponent wins +50 XP and you lose 50 XP.',
-            )
-          ) {
-            resign();
-          }
-        }}
+        onOfferDraw={() => setDrawModalOpen(true)}
+        onResign={() => setResignModalOpen(true)}
+      />
+
+      <DrawOfferModal
+        open={drawModalOpen}
+        loading={drawLoading}
+        onConfirm={() => void handleOfferDraw()}
+        onCancel={() => setDrawModalOpen(false)}
+      />
+      <ResignModal
+        open={resignModalOpen}
+        loading={resignLoading}
+        onConfirm={() => void handleResign()}
+        onCancel={() => setResignModalOpen(false)}
       />
     </div>
   );

@@ -21,7 +21,7 @@ interface SessionState {
 const initialState: SessionState = {
   sessionId: null,
   phase: 'joining',
-  timerSeconds: 300,
+  timerSeconds: 60,
   isMuted: false,
   isCameraOff: false,
   partnerName: '',
@@ -46,7 +46,7 @@ const sessionSlice = createSlice({
       state.partnerName = action.payload.partnerName;
       state.topic = normalizeTopicId(action.payload.topic);
       state.phase = 'joining';
-      state.timerSeconds = 300;
+      state.timerSeconds = 60;
       state.result = null;
       state.waitingForPartner = true;
       state.drawOfferPending = false;
@@ -73,7 +73,7 @@ const sessionSlice = createSlice({
       state.timerSeconds =
         action.payload.remainingSeconds ??
         action.payload.durationSeconds ??
-        300;
+        60;
       state.waitingForPartner = false;
       state.shouldOfferWebRTC = action.payload.shouldOffer;
       if (action.payload.topic) {

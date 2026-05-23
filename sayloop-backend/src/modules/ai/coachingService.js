@@ -1,5 +1,6 @@
 const OpenAI = require('openai');
 const { getTopic } = require('../../config/topics');
+const { computeSpeakingMetrics } = require('./coachingMetrics');
 
 function getOpenAI() {
   const key = process.env.OPENAI_API_KEY;
@@ -7,46 +8,68 @@ function getOpenAI() {
   return new OpenAI({ apiKey: key });
 }
 
-function computeMetrics(transcript, durationSeconds) {
-  const words = transcript.trim().split(/\s+/).filter(Boolean);
-  const wordCount = words.length;
-  const duration = Math.max(durationSeconds, 1);
-  const wpm = Math.round((wordCount / duration) * 60);
-  const fillers = ['um', 'uh', 'like', 'you know', 'basically', 'actually'];
-  let fillerTotal = 0;
-  const lower = transcript.toLowerCase();
-  for (const f of fillers) {
-    const re = new RegExp(`\\b${f.replace(/\s/g, '\\s+')}\\b`, 'gi');
-    const m = lower.match(re);
-    if (m) fillerTotal += m.length;
-  }
-  let wpmLabel = 'steady';
-  if (wpm < 90) wpmLabel = 'slow';
-  else if (wpm > 150) wpmLabel = 'fast';
-
-  return { wordCount, wpm, wpmLabel, fillerTotal, durationSeconds: duration };
-}
-
 function fallbackNarrative(transcript, metrics, topicLabel) {
   if (!transcript || metrics.wordCount < 3) {
     return `You had limited captured speech for "${topicLabel}". Try speaking in longer phrases so we can coach your pace and clarity next round.`;
   }
+
+  const topFillers = Object.entries(metrics.fillerCounts || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([w, c]) => `"${w}" (${c}×)`)
+    .join(', ');
+
   const fillerNote =
     metrics.fillerTotal > 2
-      ? ` You used several filler words — pause briefly instead of saying "um" or "like".`
+      ? ` Cut fillers${topFillers ? ` like ${topFillers}` : ''}.`
       : '';
   const paceNote =
     metrics.wpmLabel === 'fast'
-      ? ' Your pace was quite fast; slow down so your partner can follow your argument.'
+      ? ' Your pace ran fast — slow slightly so your partner can follow.'
       : metrics.wpmLabel === 'slow'
-        ? ' Your pace was calm; try adding one more supporting example to strengthen your point.'
-        : ' Your speaking pace was easy to follow.';
-  return `On "${topicLabel}", you shared ${metrics.wordCount} words in about ${metrics.durationSeconds} seconds.${paceNote}${fillerNote} Pick one claim you made and add a concrete example next time.`;
+        ? ' Your pace was calm — add one concrete example to strengthen your point.'
+        : ' Your pace was easy to follow.';
+  const pauseNote =
+    metrics.pauseCount > 3
+      ? ` You had ${metrics.pauseCount} long pauses — brief silence is fine, but plan your next sentence.`
+      : '';
+
+  return `On "${topicLabel}", you spoke about ${metrics.wordCount} words at ${metrics.wpm} WPM.${paceNote}${fillerNote}${pauseNote}`;
 }
 
-async function generateCoachingNarrative({ transcript, topicId, durationSeconds }) {
+function buildMetricsBlock(metrics, topic) {
+  const topFillers = Object.entries(metrics.fillerCounts || {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([w, c]) => `"${w}" (${c}×)`)
+    .join(', ');
+
+  return [
+    `Topic: ${topic.label} — ${topic.prompt}`,
+    `Duration: ${metrics.durationSeconds}s`,
+    `Words spoken: ${metrics.wordCount}`,
+    `Pace: ${metrics.wpm} WPM (${metrics.wpmLabel})`,
+    `Pitch variance: ${metrics.pitchVariance} Hz (${metrics.pitchLabel}, estimated from rhythm)`,
+    `Filler words: ${metrics.fillerTotal}${metrics.fillerTotal > 0 ? ` — ${topFillers}` : ''}`,
+    `Speed variation: ±${metrics.speedVariation} WPM (${metrics.speedVariationLabel})`,
+    `Pauses (≥1.2s): ${metrics.pauseCount}`,
+  ].join('\n');
+}
+
+async function generateCoachingNarrative({
+  transcript,
+  topicId,
+  durationSeconds,
+  lines,
+  sessionStartMs,
+}) {
   const topic = getTopic(topicId) || getTopic('social_media');
-  const metrics = computeMetrics(transcript, durationSeconds);
+  const metrics = computeSpeakingMetrics(
+    transcript,
+    durationSeconds,
+    lines,
+    sessionStartMs,
+  );
   const openai = getOpenAI();
 
   if (!openai || !transcript.trim()) {
@@ -57,19 +80,13 @@ async function generateCoachingNarrative({ transcript, topicId, durationSeconds 
     };
   }
 
-  const metricsBlock = [
-    `Topic: ${topic.label} — ${topic.prompt}`,
-    `Duration: ${metrics.durationSeconds}s`,
-    `Words spoken: ${metrics.wordCount}`,
-    `Pace: ${metrics.wpm} WPM (${metrics.wpmLabel})`,
-    `Filler words detected: ${metrics.fillerTotal}`,
-  ].join('\n');
+  const metricsBlock = buildMetricsBlock(metrics, topic);
 
   const prompt = `You are a speaking coach. A learner just finished a live 1-on-1 debate in English.
 
 ${metricsBlock}
 
-Their speech transcript (may be partial):
+Transcript:
 "${transcript.slice(0, 4000)}"
 
 Write 2–3 sentences of direct, specific, actionable coaching. Reference what they actually said when possible. No bullet points. No generic praise unless earned. Be honest and concrete.`;
@@ -95,4 +112,4 @@ Write 2–3 sentences of direct, specific, actionable coaching. Reference what t
   }
 }
 
-module.exports = { generateCoachingNarrative, computeMetrics };
+module.exports = { generateCoachingNarrative, computeSpeakingMetrics };

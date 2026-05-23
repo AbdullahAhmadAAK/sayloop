@@ -79,23 +79,56 @@ export async function fetchStuckPrompts(topicId: string, refresh = false) {
   return data;
 }
 
+export type CoachMetricsPayload = {
+  wordCount: number;
+  wpm: number;
+  wpmLabel: string;
+  fillerTotal: number;
+  fillerCounts: Record<string, number>;
+  pitchVariance: number;
+  pitchLabel: string;
+  speedVariation: number;
+  speedVariationLabel: string;
+  pauseCount: number;
+  durationSeconds: number;
+};
+
 export type CoachingAnalyzeResult = {
   success: boolean;
   coachingNarrative: string;
-  metrics?: {
-    wordCount: number;
-    wpm: number;
-    wpmLabel: string;
-    fillerTotal: number;
-    durationSeconds: number;
-  };
+  metrics?: CoachMetricsPayload;
   source: 'openai' | 'fallback';
 };
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(',')[1] ?? '';
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+export async function fetchTranscribeDebate(audio: Blob) {
+  const audioBase64 = await blobToBase64(audio);
+  const { data } = await api.post<{ success: boolean; text: string; source: string }>(
+    '/ai/transcribe-debate',
+    { audioBase64, mimeType: audio.type || 'audio/webm' },
+    { timeout: 90000 },
+  );
+  return data;
+}
 
 export async function fetchCoachingAnalyze(body: {
   transcript: string;
   topicId: string;
   durationSeconds: number;
+  lines?: Array<{ text: string; at: number }>;
+  sessionStartMs?: number;
 }) {
   const { data } = await api.post<CoachingAnalyzeResult>('/ai/coaching-analyze', body, {
     timeout: 45000,

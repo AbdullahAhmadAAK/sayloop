@@ -1,5 +1,5 @@
 const stats = [
-  { value: '5 min', label: 'Per session — fits real life' },
+  { value: '1 min', label: 'Per session — fits real life' },
   { value: '8+', label: 'Debate topics to break the ice' },
   { value: '100%', label: 'Live human partners' },
 ];

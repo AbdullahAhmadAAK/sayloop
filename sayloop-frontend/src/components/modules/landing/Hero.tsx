@@ -33,7 +33,7 @@ export default function Hero() {
             </a>
           </div>
           <p className="mt-4 text-sm text-ink/50">
-            No credit card · 5-minute sessions · Match in under a minute
+            No credit card · 1-minute sessions · Match in under a minute
           </p>
         </div>
 

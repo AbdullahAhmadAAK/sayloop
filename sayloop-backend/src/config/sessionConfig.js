@@ -1,5 +1,5 @@
 /** Live debate session timing (seconds). */
-const SESSION_DURATION_SECONDS = 300; // 5 minutes
+const SESSION_DURATION_SECONDS = 60; // 1 minute
 
 /** XP awards per user (hackathon scoring — replace with AI judge later). */
 const XP = {

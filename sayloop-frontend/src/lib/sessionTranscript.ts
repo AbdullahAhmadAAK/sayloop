@@ -1,5 +1,6 @@
 import type { TopicId } from '@/constants/topics';
-import { fetchCoachingAnalyze, type CoachingAnalyzeResult } from '@/lib/api';
+import { fetchCoachingAnalyze, fetchTranscribeDebate, type CoachingAnalyzeResult } from '@/lib/api';
+import { stopDebateRecording } from '@/lib/debateAudioCapture';
 
 const STORAGE_KEY = 'sayloop_pending_coach';
 
@@ -13,6 +14,12 @@ export type CoachMetrics = {
   wpm: number;
   wpmLabel: string;
   fillerTotal: number;
+  fillerCounts: Record<string, number>;
+  pitchVariance: number;
+  pitchLabel: string;
+  speedVariation: number;
+  speedVariationLabel: string;
+  pauseCount: number;
   durationSeconds: number;
 };
 
@@ -37,6 +44,7 @@ export type PendingCoachSession = {
 type CoachListener = (pending: PendingCoachSession | null) => void;
 const listeners = new Set<CoachListener>();
 let analysisPromise: Promise<void> | null = null;
+let cachedAudioBlob: Blob | null = null;
 
 function notifyListeners() {
   const pending = loadPendingCoach();
@@ -69,11 +77,13 @@ export function savePendingCoach(data: PendingCoachSession) {
 
 export function appendTranscriptLine(sessionId: string, text: string) {
   const pending = loadPendingCoach();
-  if (!pending || pending.sessionId !== sessionId) return;
+  const sid = String(sessionId);
+  if (!pending || String(pending.sessionId) !== sid) return;
   const line = text.trim();
   if (!line) return;
   pending.lines.push({ text: line, at: Date.now() });
   savePendingCoach(pending);
+  notifyListeners();
 }
 
 export function initCoachSession(payload: {
@@ -81,9 +91,21 @@ export function initCoachSession(payload: {
   topic: TopicId;
   partnerName: string;
 }) {
+  const sid = String(payload.sessionId);
+  const existing = loadPendingCoach();
+
+  if (existing && String(existing.sessionId) === sid) {
+    existing.topic = payload.topic;
+    existing.partnerName = payload.partnerName;
+    if (!existing.startedAt) existing.startedAt = Date.now();
+    savePendingCoach(existing);
+    notifyListeners();
+    return;
+  }
+
   analysisPromise = null;
   savePendingCoach({
-    sessionId: payload.sessionId,
+    sessionId: sid,
     topic: payload.topic,
     partnerName: payload.partnerName,
     startedAt: Date.now(),
@@ -96,13 +118,63 @@ export function initCoachSession(payload: {
   notifyListeners();
 }
 
+const ANALYSIS_DELAY_MS = 2000;
+
 export function finalizeCoachSession(sessionId: string, durationSeconds: number) {
   const pending = loadPendingCoach();
-  if (!pending || pending.sessionId !== sessionId) return;
+  const sid = String(sessionId);
+  if (!pending || String(pending.sessionId) !== sid) return;
   pending.endedAt = Date.now();
   pending.durationSeconds = durationSeconds;
+  pending.analysisStatus = 'idle';
+  pending.analysisError = undefined;
   savePendingCoach(pending);
-  void startCoachAnalysis();
+  notifyListeners();
+  void captureDebateAudioBlob();
+  scheduleCoachAnalysis(ANALYSIS_DELAY_MS);
+}
+
+export async function captureDebateAudioBlob() {
+  try {
+    cachedAudioBlob = await stopDebateRecording();
+  } catch {
+    cachedAudioBlob = null;
+  }
+}
+
+export function scheduleCoachAnalysis(delayMs = ANALYSIS_DELAY_MS) {
+  if (delayMs <= 0) {
+    void startCoachAnalysis();
+    return;
+  }
+  setTimeout(() => void startCoachAnalysis(), delayMs);
+}
+
+async function ensureTranscriptFromAudio() {
+  const pending = loadPendingCoach();
+  if (!pending || getTranscriptText(pending)) return;
+
+  const blob = cachedAudioBlob ?? (await stopDebateRecording());
+  cachedAudioBlob = null;
+  if (!blob || blob.size < 800) return;
+
+  const latest = loadPendingCoach();
+  if (!latest) return;
+
+  try {
+    const res = await fetchTranscribeDebate(blob);
+    const text = res.text?.trim();
+    if (!text) return;
+
+    const updated = loadPendingCoach();
+    if (!updated) return;
+
+    updated.lines = [{ text, at: updated.startedAt }];
+    savePendingCoach(updated);
+    notifyListeners();
+  } catch (err) {
+    console.warn('[coach] Whisper transcribe failed', err);
+  }
 }
 
 export function getTranscriptText(pending: PendingCoachSession): string {
@@ -127,7 +199,8 @@ export function ensureCoachAnalysisStarted() {
   if (!pending) return;
   if (pending.analysisStatus === 'done' || pending.analysisStatus === 'running') return;
   if (pending.endedAt > 0 || pending.durationSeconds > 0) {
-    void startCoachAnalysis();
+    if (pending.analysisStatus === 'error' && !getTranscriptText(pending)) return;
+    scheduleCoachAnalysis(pending.analysisStatus === 'error' ? 300 : 0);
   }
 }
 
@@ -140,30 +213,43 @@ export function retryCoachAnalysis(): Promise<void> {
   pending.analyzed = false;
   savePendingCoach(pending);
   notifyListeners();
-  return startCoachAnalysis();
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      void (async () => {
+        await ensureTranscriptFromAudio();
+        await startCoachAnalysis();
+      })().finally(resolve);
+    }, 500);
+  });
 }
 
 export function startCoachAnalysis(): Promise<void> {
   if (analysisPromise) return analysisPromise;
 
   analysisPromise = (async () => {
-    const pending = loadPendingCoach();
+    let pending = loadPendingCoach();
     if (!pending) return;
 
-    if (pending.analysisStatus === 'done' || pending.analysisStatus === 'running') {
+    if (pending.analysisStatus === 'done') {
       return;
     }
 
-    const transcript = getTranscriptText(pending);
+    let transcript = getTranscriptText(pending);
+    if (!transcript) {
+      await ensureTranscriptFromAudio();
+      transcript = getTranscriptText(loadPendingCoach() ?? pending);
+    }
+
     if (!transcript) {
       pending.analysisStatus = 'error';
       pending.analysisError =
-        'No speech was captured. Use Chrome or Edge, allow the mic, and speak during the debate.';
+        'No speech was captured. Allow the microphone, speak during the debate (unmuted), then tap Retry. Coaching uses your mic recording via Whisper.';
       savePendingCoach(pending);
       notifyListeners();
       return;
     }
 
+    pending = loadPendingCoach() ?? pending;
     pending.analysisStatus = 'running';
     pending.analysisError = undefined;
     savePendingCoach(pending);
@@ -174,6 +260,8 @@ export function startCoachAnalysis(): Promise<void> {
         transcript,
         topicId: pending.topic,
         durationSeconds: pending.durationSeconds || 60,
+        lines: pending.lines,
+        sessionStartMs: pending.startedAt,
       });
 
       const latest = loadPendingCoach();
@@ -207,6 +295,7 @@ export function startCoachAnalysis(): Promise<void> {
 
 export function clearPendingCoach() {
   analysisPromise = null;
+  cachedAudioBlob = null;
   sessionStorage.removeItem(STORAGE_KEY);
   notifyListeners();
 }

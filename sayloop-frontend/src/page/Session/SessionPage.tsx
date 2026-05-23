@@ -11,6 +11,7 @@ import { leaveDebateSession } from '@/lib/sessionApi';
 import { resetSession } from '@/redux/slice/sessionSlice';
 import { resetMatchFlow } from '@/redux/slice/matchSlice';
 import { clearPendingCoach, ensureCoachAnalysisStarted } from '@/lib/sessionTranscript';
+import { useSpeechCapture } from '@/hooks/useSpeechCapture';
 
 type PostGameView = 'summary' | 'review';
 
@@ -26,6 +27,10 @@ export default function SessionPage() {
   const activeSessionId = sessionId || stateSessionId || null;
   sessionIdRef.current = activeSessionId;
   const { tryJoin } = useSessionRoom();
+
+  const captureSpeech =
+    Boolean(activeSessionId) && (phase === 'joining' || phase === 'active');
+  useSpeechCapture(captureSpeech, activeSessionId);
 
   useEffect(() => {
     if (phase === 'ended') {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { getSocket } from '@/lib/socket';
 import { useAppDispatch, useAppSelector } from '@/hooks/useAppDispatch';
 import { setMediaError } from '@/redux/slice/sessionSlice';
+import { startDebateRecording } from '@/lib/debateAudioCapture';
 
 type SignalPayload = {
   fromUserId: number;
@@ -34,6 +35,19 @@ export function useWebRTC() {
 
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [partnerConnected, setPartnerConnected] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const mediaReadyRef = useRef(false);
+  const activatedRef = useRef(false);
+  const phaseRef = useRef(phase);
+  const partnerConnectedRef = useRef(false);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
+
+  useEffect(() => {
+    partnerConnectedRef.current = partnerConnected;
+  }, [partnerConnected]);
 
   useEffect(() => {
     shouldOfferRef.current = shouldOfferWebRTC;
@@ -175,7 +189,32 @@ export function useWebRTC() {
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     setRemoteStream(null);
     setPartnerConnected(false);
+    setConnecting(false);
+    mediaReadyRef.current = false;
+    activatedRef.current = false;
   }, []);
+
+  const activateSignaling = useCallback(
+    (boundSessionId: string) => {
+      if (activatedRef.current || !mediaReadyRef.current) return;
+      activatedRef.current = true;
+      setConnecting(true);
+
+      const s = getSocket();
+      if (!s) return;
+
+      s.emit('session:webrtc-ready', { sessionId: boundSessionId });
+      if (shouldOfferRef.current) {
+        sendOffer().catch((err) => console.warn('[webrtc] offer error', err));
+        setTimeout(() => {
+          if (pcRef.current && !partnerConnectedRef.current) {
+            sendOffer().catch(() => undefined);
+          }
+        }, 800);
+      }
+    },
+    [sendOffer],
+  );
 
   useEffect(() => {
     if (!remoteStream || !remoteVideoRef.current) return;
@@ -184,11 +223,13 @@ export function useWebRTC() {
   }, [remoteStream]);
 
   useEffect(() => {
-    if (phase !== 'active' || !sessionId) return;
+    const inSession = (phase === 'joining' || phase === 'active') && sessionId;
+    if (!inSession) return;
 
     const boundSessionId = sessionId;
     let cancelled = false;
     activeRef.current = true;
+    setConnecting(true);
 
     const s = getSocket();
     if (!s) return;
@@ -196,7 +237,7 @@ export function useWebRTC() {
     const onSignal = (payload: SignalPayload) => queueOrHandleSignal(payload);
 
     const onPeerReady = () => {
-      if (shouldOfferRef.current && pcRef.current) {
+      if (phaseRef.current === 'active' && shouldOfferRef.current && pcRef.current) {
         sendOffer().catch((err) => console.warn('[webrtc] offer error', err));
       }
     };
@@ -216,6 +257,7 @@ export function useWebRTC() {
         }
 
         localStreamRef.current = stream;
+        startDebateRecording(boundSessionId, stream);
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
           localVideoRef.current.muted = true;
@@ -272,13 +314,14 @@ export function useWebRTC() {
         await flushPendingSignals();
         if (cancelled || !activeRef.current) return;
 
-        s.emit('session:webrtc-ready', { sessionId: boundSessionId });
+        mediaReadyRef.current = true;
         dispatch(setMediaError(null));
 
-        if (shouldOfferRef.current) {
-          await sendOffer();
+        if (phaseRef.current === 'active') {
+          activateSignaling(boundSessionId);
         }
       } catch (err) {
+        setConnecting(false);
         const msg =
           err instanceof Error
             ? err.message
@@ -291,15 +334,11 @@ export function useWebRTC() {
 
     const retryOffer = setInterval(() => {
       const pc = pcRef.current;
-      if (!pc || !shouldOfferRef.current || !activeRef.current) return;
-      if (
-        pc.signalingState === 'stable' &&
-        !pc.currentRemoteDescription &&
-        pc.connectionState !== 'connected'
-      ) {
+      if (!pc || phaseRef.current !== 'active' || !activeRef.current) return;
+      if (shouldOfferRef.current && !pc.currentRemoteDescription && pc.connectionState !== 'connected') {
         sendOffer().catch(() => undefined);
       }
-    }, 5000);
+    }, 1500);
 
     return () => {
       cancelled = true;
@@ -316,10 +355,21 @@ export function useWebRTC() {
     queueOrHandleSignal,
     flushPendingSignals,
     attachRemoteStream,
+    activateSignaling,
   ]);
 
   useEffect(() => {
-    if (phase !== 'active') {
+    if (phase === 'active' && sessionId && mediaReadyRef.current) {
+      activateSignaling(sessionId);
+    }
+  }, [phase, sessionId, activateSignaling]);
+
+  useEffect(() => {
+    if (partnerConnected) setConnecting(false);
+  }, [partnerConnected]);
+
+  useEffect(() => {
+    if (phase !== 'joining' && phase !== 'active') {
       stopMedia();
     }
   }, [phase, stopMedia]);
@@ -340,5 +390,5 @@ export function useWebRTC() {
     });
   }, [isCameraOff]);
 
-  return { localVideoRef, remoteVideoRef, remoteStream, partnerConnected };
+  return { localVideoRef, remoteVideoRef, remoteStream, partnerConnected, connecting };
 }

@@ -21,6 +21,24 @@ type Props = {
   onLeave: () => void;
 };
 
+function MetricCard({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+}) {
+  return (
+    <div className="rounded-xl bg-white p-3 text-center shadow-sm">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-ink/40">{label}</p>
+      <p className="mt-1 text-lg font-extrabold text-ink">{value}</p>
+      <p className="text-[10px] capitalize text-ink/45">{sub}</p>
+    </div>
+  );
+}
+
 function applyPending(
   pending: PendingCoachSession | null,
   sessionId: string | null | undefined,
@@ -131,7 +149,9 @@ export default function SessionReviewScreen({
         <div className="mt-8 flex flex-col items-center gap-3 text-center">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand/20 border-t-brand" />
           <p className="text-sm font-semibold text-ink/70">Finishing your analysis…</p>
-          <p className="text-xs text-ink/45">Started when the debate ended — almost ready</p>
+          <p className="text-xs text-ink/45">
+            Transcribing your mic with Whisper, then building coach notes
+          </p>
         </div>
       )}
 
@@ -157,24 +177,37 @@ export default function SessionReviewScreen({
       )}
 
       {!loading && metrics && (
-        <div className="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="rounded-xl bg-white p-3 text-center shadow-sm">
-            <p className="text-lg font-extrabold text-ink">{metrics.wpm}</p>
-            <p className="text-[10px] text-ink/45">WPM</p>
-            <p className="text-[10px] font-semibold capitalize text-brand">{metrics.wpmLabel}</p>
+        <div className="mt-6 space-y-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <MetricCard label="Pace" value={`${metrics.wpm}`} sub={`WPM · ${metrics.wpmLabel}`} />
+            <MetricCard
+              label="Pitch variance"
+              value={`${metrics.pitchVariance}`}
+              sub={`Hz · ${metrics.pitchLabel}`}
+            />
+            <MetricCard label="Fillers" value={`${metrics.fillerTotal}`} sub="detected" />
+            <MetricCard
+              label="Speed variation"
+              value={`±${metrics.speedVariation}`}
+              sub={`WPM · ${metrics.speedVariationLabel}`}
+            />
+            <MetricCard label="Pauses" value={`${metrics.pauseCount}`} sub="≥ 1.2s gaps" />
+            <MetricCard label="Words" value={`${metrics.wordCount}`} sub={`${metrics.durationSeconds}s`} />
           </div>
-          <div className="rounded-xl bg-white p-3 text-center shadow-sm">
-            <p className="text-lg font-extrabold text-ink">{metrics.wordCount}</p>
-            <p className="text-[10px] text-ink/45">Words</p>
-          </div>
-          <div className="rounded-xl bg-white p-3 text-center shadow-sm">
-            <p className="text-lg font-extrabold text-ink">{metrics.fillerTotal}</p>
-            <p className="text-[10px] text-ink/45">Fillers</p>
-          </div>
-          <div className="rounded-xl bg-white p-3 text-center shadow-sm">
-            <p className="text-lg font-extrabold text-ink">{metrics.durationSeconds}s</p>
-            <p className="text-[10px] text-ink/45">Speaking time</p>
-          </div>
+          {metrics.fillerCounts && Object.keys(metrics.fillerCounts).length > 0 && (
+            <div className="rounded-xl bg-white p-3 text-left shadow-sm">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-ink/40">
+                Top fillers
+              </p>
+              <p className="mt-1 text-xs text-ink/60">
+                {Object.entries(metrics.fillerCounts)
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 4)
+                  .map(([w, c]) => `"${w}" (${c}×)`)
+                  .join(' · ')}
+              </p>
+            </div>
+          )}
         </div>
       )}
 

@@ -31,7 +31,7 @@ export default function MatchmakingScreen({ onRetry }: Props) {
         </li>
         <li className="flex gap-2 text-ink/45">
           <span>○</span>
-          <span>5-minute debate timer starts</span>
+          <span>1-minute debate timer starts</span>
         </li>
       </ol>
 

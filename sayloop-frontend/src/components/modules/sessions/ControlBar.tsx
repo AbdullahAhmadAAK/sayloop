@@ -82,7 +82,7 @@ export default function ControlBar({
       </div>
 
       <p className="text-center text-[11px] text-ink/45">
-        Finish 5 min: +50 XP each · Draw: +25 each · Resign: +50 win / −50 loss
+        Finish 1 min: +50 XP each · Draw: +25 each · Resign: +50 win / −50 loss
       </p>
     </div>
   );
