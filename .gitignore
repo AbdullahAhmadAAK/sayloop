@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.local
+*.log
+.DS_Store
+.vercel
+sayloop-repo/
+sayloop-backend/
+sayloop-frontend/
+node_modules/

@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum MatchStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CONFIRMED
+  IN_SESSION
+  EXPIRED
+}
+
+model User {
+  id                 Int      @id @default(autoincrement())
+  clerkId            String   @unique
+  email              String?
+  firstName          String?
+  lastName           String?
+  nickname           String?
+  pfpSource          String?
+  avatarStyle        String?
+  avatarSeed         String?
+  learningLanguage   String?  @default("English")
+  interests          Json?
+  onboardingComplete Boolean  @default(false)
+  xp                 Int      @default(0)
+  gems               Int      @default(0)
+  streak             Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  matchesSent     Match[] @relation("MatchesSent")
+  matchesReceived Match[] @relation("MatchesReceived")
+}
+
+model Match {
+  id             String      @id @default(cuid())
+  requesterId    Int
+  receiverId     Int
+  topic          String
+  status         MatchStatus @default(PENDING)
+  sessionId      String?
+  requesterReady Boolean     @default(false)
+  receiverReady  Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  requester User @relation("MatchesSent", fields: [requesterId], references: [id], onDelete: Cascade)
+  receiver  User @relation("MatchesReceived", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([requesterId, status])
+  @@index([receiverId, status])
+}

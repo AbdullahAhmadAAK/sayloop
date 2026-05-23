@@ -1,0 +1,37 @@
+{
+  "name": "sayloop-backend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "commonjs",
+  "scripts": {
+    "predev": "node scripts/free-port.js",
+    "dev": "nodemon src/server.js",
+    "start": "node src/server.js",
+    "build": "prisma generate && prisma migrate deploy",
+    "migrate": "prisma migrate dev",
+    "studio": "prisma studio",
+    "seed": "node src/prisma/seed.js"
+  },
+  "dependencies": {
+    "@clerk/clerk-sdk-node": "^4.13.23",
+    "@google/generative-ai": "^0.21.0",
+    "@prisma/client": "^5.22.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.22.1",
+    "express-rate-limit": "^7.5.0",
+    "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
+    "openai": "^4.77.0",
+    "socket.io": "^4.8.3",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9",
+    "prisma": "^5.22.0"
+  },
+  "prisma": {
+    "schema": "src/prisma/schema.prisma",
+    "seed": "node src/prisma/seed.js"
+  }
+}
