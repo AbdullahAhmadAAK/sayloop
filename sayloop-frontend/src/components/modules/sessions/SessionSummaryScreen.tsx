@@ -38,8 +38,8 @@ function analysisHint(status: AnalysisStatus | undefined) {
     case 'running':
     case 'idle':
       return {
-        text: 'Analyzing your speaking in the background…',
-        ready: false,
+        text: 'Coach analysis will run when you open review.',
+        ready: true,
       };
     case 'done':
       return {
@@ -74,7 +74,7 @@ export default function SessionSummaryScreen({ result, topic: topicProp, onRevie
   }, []);
 
   const hint = analysisHint(analysisStatus);
-  const isAnalyzing = analysisStatus === 'running' || analysisStatus === 'idle';
+  const isAnalyzing = analysisStatus === 'running';
 
   return (
     <div className="mx-auto flex max-w-md flex-col items-center py-8 text-center animate-fade-in-up">

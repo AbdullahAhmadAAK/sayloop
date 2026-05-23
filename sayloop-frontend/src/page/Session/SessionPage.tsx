@@ -8,8 +8,13 @@ import SessionSummaryScreen from '@/components/modules/sessions/SessionSummarySc
 import SessionReviewScreen from '@/components/modules/sessions/SessionReviewScreen';
 import { useAppDispatch, useAppSelector } from '@/hooks/useAppDispatch';
 import { useSessionRoom } from '@/hooks/useSessionRoom';
-import { leaveDebateSession } from '@/lib/sessionApi';
-import { resetSession, tickTimer } from '@/redux/slice/sessionSlice';
+import { completeDebateSession, leaveDebateSession } from '@/lib/sessionApi';
+import { resetSession, tickTimer, endSession } from '@/redux/slice/sessionSlice';
+import {
+  captureDebateAudioBlob,
+  finalizeCoachSession,
+  loadPendingCoach,
+} from '@/lib/sessionTranscript';
 import { resetMatchFlow } from '@/redux/slice/matchSlice';
 import { clearPendingCoach, ensureCoachAnalysisStarted } from '@/lib/sessionTranscript';
 import { useSpeechCapture } from '@/hooks/useSpeechCapture';
@@ -20,7 +25,9 @@ export default function SessionPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { phase, result, sessionId, topic } = useAppSelector((s) => s.session);
+  const { phase, result, sessionId, topic, partnerName } = useAppSelector((s) => s.session);
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
   const stateSessionId = (location.state as { sessionId?: string; endedAt?: number } | null)
     ?.sessionId;
   const [postGameView, setPostGameView] = useState<PostGameView>('summary');
@@ -42,6 +49,40 @@ export default function SessionPage() {
     const id = window.setInterval(() => dispatch(tickTimer()), 1000);
     return () => window.clearInterval(id);
   }, [phase, dispatch]);
+
+  // After time's up: ask server to finalize + never spin forever if session:end is delayed.
+  useEffect(() => {
+    if (phase !== 'wrapping' || !activeSessionId) return;
+
+    const sid = activeSessionId;
+    void completeDebateSession(sid);
+
+    void (async () => {
+      await captureDebateAudioBlob();
+      const pending = loadPendingCoach();
+      if (pending && String(pending.sessionId) === String(sid) && !pending.endedAt) {
+        const duration = pending.startedAt
+          ? Math.max(1, Math.round((Date.now() - pending.startedAt) / 1000))
+          : 60;
+        finalizeCoachSession(sid, duration);
+      }
+    })();
+
+    const fallbackMs = 8000;
+    const timeoutId = window.setTimeout(() => {
+      if (phaseRef.current !== 'wrapping') return;
+      dispatch(
+        endSession({
+          outcome: 'COMPLETE',
+          xpEarned: 50,
+          partnerName: partnerName || 'Partner',
+          topic,
+        }),
+      );
+    }, fallbackMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [phase, activeSessionId, dispatch, partnerName, topic]);
 
   useEffect(() => {
     if (phase === 'ended') {
@@ -97,10 +138,21 @@ export default function SessionPage() {
     );
   }
 
+  const skipWrapping = () => {
+    dispatch(
+      endSession({
+        outcome: 'COMPLETE',
+        xpEarned: 50,
+        partnerName: partnerName || 'Partner',
+        topic,
+      }),
+    );
+  };
+
   if (phase === 'wrapping') {
     return (
       <PageShell title="Live debate" hideRight>
-        <WrappingScreen />
+        <WrappingScreen onSkip={skipWrapping} />
       </PageShell>
     );
   }

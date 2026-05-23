@@ -1,6 +1,6 @@
 const sessionStore = require('./session.store');
 const sessionService = require('./session.service');
-const { SESSION_DURATION_SECONDS } = require('../../config/sessionConfig');
+const { SESSION_DURATION_SECONDS, XP } = require('../../config/sessionConfig');
 const { getTopic } = require('../../config/topics');
 
 function emitToUser(io, userId, event, payload) {
@@ -19,29 +19,75 @@ function formatEndPayload(result, topic, partnerNickname) {
   };
 }
 
+function emitWrapping(io, state) {
+  const { sessionId } = state;
+  io.to(sessionId).emit('session:timer', { remainingSeconds: 0 });
+  io.to(sessionId).emit('session:wrapping', { sessionId });
+  emitToUser(io, state.requesterId, 'session:wrapping', { sessionId });
+  emitToUser(io, state.receiverId, 'session:wrapping', { sessionId });
+}
+
+function fallbackOutcome(endType, userId, resignerId) {
+  if (endType === 'DRAW') return 'DRAW';
+  if (endType === 'RESIGN') {
+    return userId === resignerId ? 'LOSS' : 'WIN';
+  }
+  return 'COMPLETE';
+}
+
+function fallbackXp(endType, userId, resignerId) {
+  if (endType === 'DRAW') return XP.DRAW;
+  if (endType === 'RESIGN') {
+    return userId === resignerId ? XP.LOSS_ON_RESIGN : XP.WIN_ON_RESIGN;
+  }
+  return XP.SESSION_COMPLETE;
+}
+
 async function endSession(io, state, endType, resignerId = null) {
   if (state.ended) return;
   state.ended = true;
   sessionStore.clearTimer(state);
 
   const sessionId = state.sessionId;
-  io.to(sessionId).emit('session:timer', { remainingSeconds: 0 });
-  io.to(sessionId).emit('session:wrapping', { sessionId });
+  emitWrapping(io, state);
 
-  const match = await sessionService.getMatchForSession(sessionId);
-  if (!match) {
+  const userIds = [state.requesterId, state.receiverId];
+  let match = null;
+  let results = null;
+  let requester = null;
+  let receiver = null;
+
+  try {
+    match = await sessionService.getMatchForSession(sessionId);
+    if (!match) {
+      throw new Error('Match not found for session');
+    }
+
+    const usersRepo = require('../../db/users.repo');
+    [results, requester, receiver] = await Promise.all([
+      sessionService.applySessionRewards(match, endType, resignerId),
+      usersRepo.findById(match.requesterId),
+      usersRepo.findById(match.receiverId),
+    ]);
+  } catch (err) {
+    console.error('[session] endSession error — sending fallback results', err.message);
+    for (const uid of userIds) {
+      const partnerId = uid === state.requesterId ? state.receiverId : state.requesterId;
+      emitToUser(io, uid, 'session:end', {
+        outcome: fallbackOutcome(endType, uid, resignerId),
+        xpEarned: fallbackXp(endType, uid, resignerId),
+        totalXp: 0,
+        topic: state.topic,
+        partnerName: 'Partner',
+        sessionId,
+        reason: endType,
+      });
+    }
     sessionStore.destroySession(sessionId);
     return;
   }
 
-  const usersRepo = require('../../db/users.repo');
-  const [results, requester, receiver] = await Promise.all([
-    sessionService.applySessionRewards(match, endType, resignerId),
-    usersRepo.findById(match.requesterId),
-    usersRepo.findById(match.receiverId),
-  ]);
   const topicMeta = getTopic(match.topic);
-
   const endPayloadBase = {
     reason: endType,
     topicLabel: topicMeta?.label,
@@ -292,6 +338,36 @@ function registerSessionHandlers(io, socket) {
     state.drawOfferFromUserId = null;
     if (offerer) {
       emitToUser(io, offerer, 'session:draw-declined', { sessionId });
+    }
+  });
+
+  socket.on('session:time-up', async (payload, ack) => {
+    const reply = (data) => {
+      if (typeof ack === 'function') ack(data);
+    };
+
+    try {
+      const sessionId = payload?.sessionId;
+      if (!sessionId) {
+        return reply({ ok: false, message: 'sessionId required' });
+      }
+
+      const state = sessionStore.getSession(sessionId);
+      if (!state) {
+        return reply({ ok: true, alreadyEnded: true });
+      }
+      if (state.ended) {
+        return reply({ ok: true, alreadyEnded: true });
+      }
+
+      const match = await sessionService.getMatchForSession(sessionId);
+      await sessionService.assertParticipant(match, userId);
+
+      await endSession(io, state, 'COMPLETE');
+      reply({ ok: true });
+    } catch (err) {
+      console.error('[session] time-up', err);
+      reply({ ok: false, message: err.message || 'Could not end session' });
     }
   });
 

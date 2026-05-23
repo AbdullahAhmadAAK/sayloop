@@ -106,7 +106,22 @@ export default function SessionReviewScreen({
       setLoading,
     };
 
-    return subscribeCoachSession((p) => applyPending(p, sessionId, setters));
+    const unsub = subscribeCoachSession((p) => applyPending(p, sessionId, setters));
+
+    const stuckId = window.setTimeout(() => {
+      const p = loadPendingCoach();
+      if (p?.analysisStatus === 'running' || p?.analysisStatus === 'idle') {
+        setLoading(false);
+        setError(
+          'Analysis is taking too long. Check OPENAI_API_KEY on the server and your connection, then tap Retry.',
+        );
+      }
+    }, 90000);
+
+    return () => {
+      unsub();
+      window.clearTimeout(stuckId);
+    };
   }, [sessionId]);
 
   const handleRetry = async () => {
