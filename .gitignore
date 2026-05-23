@@ -6,10 +6,5 @@ dist/
 .DS_Store
 .vercel
 
-# Legacy monorepo layout (not used)
-packages/
-sayloop-repo/
-
-# Per-app secrets (never commit)
 sayloop-backend/.env
 sayloop-frontend/.env.local
