@@ -5,6 +5,7 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import { getTopic } from '@/constants/topics';
 import {
+  ensureCoachAnalysisStarted,
   loadPendingCoach,
   subscribeCoachSession,
   type AnalysisStatus,
@@ -66,6 +67,7 @@ export default function SessionSummaryScreen({ result, topic: topicProp, onRevie
   );
 
   useEffect(() => {
+    ensureCoachAnalysisStarted();
     return subscribeCoachSession((pending) => {
       setAnalysisStatus(pending?.analysisStatus);
     });

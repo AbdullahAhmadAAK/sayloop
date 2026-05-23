@@ -2,7 +2,9 @@
 
 interface ImportMetaEnv {
   readonly VITE_CLERK_PUBLISHABLE_KEY: string;
-  readonly VITE_API_URL: string;
+  readonly VITE_API_URL?: string;
+  readonly VITE_SOCKET_URL?: string;
+  readonly VITE_USE_DEV_PROXY?: string;
   readonly VITE_SOCKET_URL: string;
 }
 

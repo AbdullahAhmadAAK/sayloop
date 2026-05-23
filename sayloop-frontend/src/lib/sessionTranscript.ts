@@ -110,6 +110,39 @@ export function getTranscriptText(pending: PendingCoachSession): string {
 }
 
 /** Runs GPT analysis in the background as soon as the debate ends. */
+/** @deprecated Use analysis flow via startCoachAnalysis — kept for hot-reload compatibility */
+export function markCoachAnalyzed(coachingNarrative?: string, metrics?: CoachMetrics) {
+  const pending = loadPendingCoach();
+  if (!pending) return;
+  pending.analyzed = true;
+  pending.analysisStatus = 'done';
+  if (coachingNarrative) pending.coachingNarrative = coachingNarrative;
+  if (metrics) pending.metrics = metrics;
+  savePendingCoach(pending);
+  notifyListeners();
+}
+
+export function ensureCoachAnalysisStarted() {
+  const pending = loadPendingCoach();
+  if (!pending) return;
+  if (pending.analysisStatus === 'done' || pending.analysisStatus === 'running') return;
+  if (pending.endedAt > 0 || pending.durationSeconds > 0) {
+    void startCoachAnalysis();
+  }
+}
+
+export function retryCoachAnalysis(): Promise<void> {
+  analysisPromise = null;
+  const pending = loadPendingCoach();
+  if (!pending) return Promise.resolve();
+  pending.analysisStatus = 'idle';
+  pending.analysisError = undefined;
+  pending.analyzed = false;
+  savePendingCoach(pending);
+  notifyListeners();
+  return startCoachAnalysis();
+}
+
 export function startCoachAnalysis(): Promise<void> {
   if (analysisPromise) return analysisPromise;
 
@@ -165,6 +198,7 @@ export function startCoachAnalysis(): Promise<void> {
       savePendingCoach(latest);
     } finally {
       notifyListeners();
+      analysisPromise = null;
     }
   })();
 

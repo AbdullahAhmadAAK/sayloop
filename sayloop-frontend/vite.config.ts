@@ -3,6 +3,8 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
+const API_TARGET = process.env.VITE_DEV_API_TARGET || 'http://127.0.0.1:4000';
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
@@ -14,9 +16,16 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:4000',
+        target: API_TARGET,
         changeOrigin: true,
-        timeout: 15000,
+        secure: false,
+        timeout: 30000,
+      },
+      '/socket.io': {
+        target: API_TARGET,
+        changeOrigin: true,
+        secure: false,
+        ws: true,
       },
     },
   },

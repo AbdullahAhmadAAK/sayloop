@@ -188,9 +188,17 @@ function bindSocketListeners(
     if (sessionEndHandled) return;
     sessionEndHandled = true;
 
-    const pending = loadPendingCoach();
-    const sid = payload.sessionId ?? pending?.sessionId;
+    const sid = payload.sessionId ?? loadPendingCoach()?.sessionId;
     if (sid) {
+      let pending = loadPendingCoach();
+      if (!pending) {
+        initCoachSession({
+          sessionId: sid,
+          topic: normalizeTopicId(payload.topic ?? 'social_media'),
+          partnerName: payload.partnerName ?? 'Partner',
+        });
+        pending = loadPendingCoach();
+      }
       const duration =
         pending && pending.startedAt
           ? Math.max(1, Math.round((Date.now() - pending.startedAt) / 1000))

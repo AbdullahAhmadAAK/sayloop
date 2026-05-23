@@ -1,19 +1,5 @@
 import { io, type Socket } from 'socket.io-client';
-
-function resolveSocketUrl(): string {
-  const socketUrl = import.meta.env.VITE_SOCKET_URL?.trim();
-  if (socketUrl && !socketUrl.includes('replit.dev')) {
-    return socketUrl.replace(/\/$/, '');
-  }
-  const apiUrl = import.meta.env.VITE_API_URL?.trim();
-  if (apiUrl && !apiUrl.includes('replit.dev')) {
-    return apiUrl.replace(/\/$/, '');
-  }
-  if (import.meta.env.DEV) {
-    return 'http://localhost:4000';
-  }
-  return window.location.origin;
-}
+import { resolveSocketConnect } from '@/lib/env';
 
 let socket: Socket | null = null;
 let tokenGetter: (() => Promise<string | null>) | null = null;
@@ -42,13 +28,24 @@ export async function connectSocket(): Promise<Socket> {
   }
 
   const token = tokenGetter ? await tokenGetter() : null;
+  const connect = resolveSocketConnect();
 
-  socket = io(resolveSocketUrl(), {
+  const common = {
     auth: { token },
-    transports: ['websocket', 'polling'],
+    transports: ['websocket', 'polling'] as ('websocket' | 'polling')[],
     reconnection: true,
     reconnectionAttempts: 10,
-  });
+    withCredentials: true,
+  };
+
+  if (connect.mode === 'proxy') {
+    socket = io({
+      path: '/socket.io',
+      ...common,
+    });
+  } else {
+    socket = io(connect.url, common);
+  }
 
   return socket;
 }

@@ -10,6 +10,7 @@ import MatchLiveBar from '@/components/modules/match/MatchLiveBar';
 import OnlinePartnerPicker from '@/components/modules/match/OnlinePartnerPicker';
 import Button from '@/components/ui/Button';
 import { getTopic } from '@/constants/topics';
+import { getApiErrorMessage } from '@/lib/api';
 import {
   acceptMatchChallenge,
   applyMatchAccepted,
@@ -53,12 +54,8 @@ export default function MatchPage() {
     try {
       const users = await fetchOnlineUsers();
       dispatch(setPartners(users));
-    } catch {
-      dispatch(
-        setToast(
-          'Cannot reach server. Run backend: cd sayloop-backend && npm run dev',
-        ),
-      );
+    } catch (err) {
+      dispatch(setToast(getApiErrorMessage(err)));
     } finally {
       setRefreshing(false);
     }

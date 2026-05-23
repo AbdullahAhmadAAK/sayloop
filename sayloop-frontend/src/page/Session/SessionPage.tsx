@@ -10,7 +10,7 @@ import { useSessionRoom } from '@/hooks/useSessionRoom';
 import { leaveDebateSession } from '@/lib/sessionApi';
 import { resetSession } from '@/redux/slice/sessionSlice';
 import { resetMatchFlow } from '@/redux/slice/matchSlice';
-import { clearPendingCoach } from '@/lib/sessionTranscript';
+import { clearPendingCoach, ensureCoachAnalysisStarted } from '@/lib/sessionTranscript';
 
 type PostGameView = 'summary' | 'review';
 
@@ -30,6 +30,7 @@ export default function SessionPage() {
   useEffect(() => {
     if (phase === 'ended') {
       setPostGameView('summary');
+      ensureCoachAnalysisStarted();
     }
   }, [phase, result?.outcome]);
 

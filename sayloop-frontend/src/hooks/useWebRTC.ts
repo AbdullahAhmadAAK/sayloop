@@ -89,23 +89,36 @@ export function useWebRTC() {
       const { signal } = payload;
 
       if (signal.sdp) {
-        const isOffer = signal.sdp.type === 'offer';
+        const sdpType = signal.sdp.type;
 
-        if (isOffer && pc.signalingState === 'have-local-offer') {
-          try {
-            await pc.setLocalDescription({ type: 'rollback' } as RTCSessionDescriptionInit);
-          } catch {
-            /* ignore */
+        if (sdpType === 'offer') {
+          if (pc.signalingState === 'have-local-offer') {
+            try {
+              await pc.setLocalDescription({ type: 'rollback' } as RTCSessionDescriptionInit);
+            } catch {
+              return;
+            }
           }
-        }
 
-        await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
-        await flushPendingCandidates(pc);
+          if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-remote-offer') {
+            return;
+          }
 
-        if (isOffer) {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          await flushPendingCandidates(pc);
+
+          if (pc.signalingState !== 'have-remote-offer') return;
+
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           sendSignal({ sdp: pc.localDescription ?? answer });
+          return;
+        }
+
+        if (sdpType === 'answer') {
+          if (pc.signalingState !== 'have-local-offer') return;
+          await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          await flushPendingCandidates(pc);
         }
         return;
       }

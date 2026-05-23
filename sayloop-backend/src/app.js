@@ -1,7 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
-const { corsOrigin } = require('./config/cors');
+const { corsOptions } = require('./config/cors');
+const { isProd } = require('./config/env');
 const { API_PREFIX, ROUTES } = require('./config/constants');
 const { getDb } = require('./config/database');
 const { errorHandler } = require('./middleware/error.middleware');
@@ -9,13 +10,12 @@ const { errorHandler } = require('./middleware/error.middleware');
 function createApp() {
   const app = express();
 
-  app.use(morgan('dev'));
-  app.use(
-    cors({
-      origin: corsOrigin,
-      credentials: true,
-    }),
-  );
+  if (isProd) {
+    app.set('trust proxy', 1);
+  }
+
+  app.use(morgan(isProd ? 'combined' : 'dev'));
+  app.use(cors(corsOptions));
   app.use(express.json());
 
   app.get(`${API_PREFIX}${ROUTES.HEALTH}`, async (_req, res) => {

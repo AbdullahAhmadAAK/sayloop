@@ -5,7 +5,7 @@ const { Server } = require('socket.io');
 const { createApp } = require('./app');
 
 const { port, clerkSecretKey } = require('./config/env');
-const { corsOrigin } = require('./config/cors');
+const { corsOptions } = require('./config/cors');
 
 const { connectWithRetry } = require('./config/database');
 const usersRepo = require('./db/users.repo');
@@ -22,11 +22,7 @@ const server = http.createServer(app);
 
 
 const io = new Server(server, {
-  cors: {
-    origin: corsOrigin,
-    methods: ['GET', 'POST'],
-    credentials: true,
-  },
+  cors: corsOptions,
 });
 
 

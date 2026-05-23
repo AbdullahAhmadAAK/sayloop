@@ -1,16 +1,5 @@
-import axios from 'axios';
-
-/** Use localhost in dev — never a dead remote URL (avoids 504). */
-function resolveApiBase(): string {
-  const envUrl = import.meta.env.VITE_API_URL?.trim();
-  if (envUrl && !envUrl.includes('replit.dev') && !envUrl.includes('placeholder')) {
-    return envUrl.replace(/\/$/, '');
-  }
-  if (import.meta.env.DEV) {
-    return 'http://localhost:4000';
-  }
-  return envUrl?.replace(/\/$/, '') || '';
-}
+import axios, { type AxiosError } from 'axios';
+import { resolveApiBase } from '@/lib/env';
 
 const root = resolveApiBase();
 
@@ -18,6 +7,7 @@ export const api = axios.create({
   baseURL: root ? `${root}/api` : '/api',
   headers: { 'Content-Type': 'application/json' },
   timeout: 15000,
+  withCredentials: true,
 });
 
 let tokenGetter: (() => Promise<string | null>) | null = null;
@@ -36,13 +26,31 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+export function getApiErrorMessage(error: unknown): string {
+  const err = error as AxiosError<{ message?: string }>;
+  if (err.code === 'ERR_NETWORK' || !err.response) {
+    if (import.meta.env.DEV) {
+      return 'Cannot reach API. Start backend: cd sayloop-backend && npm run dev (port 4000).';
+    }
+    return 'Cannot reach server. Check VITE_API_URL and that the API is running.';
+  }
+  if (err.response?.status === 403 || err.message?.includes('CORS')) {
+    return 'CORS blocked this request. Set FRONTEND_URL on the API to match this site URL.';
+  }
+  return err.response?.data?.message ?? err.message ?? 'Request failed';
+}
+
 api.interceptors.response.use(
   (res) => res,
   (error) => {
-    if (error.code === 'ECONNABORTED' || error.response?.status === 504) {
-      console.error(
-        '[api] Backend unreachable. Start sayloop-backend: npm run dev (port 4000)',
-      );
+    if (import.meta.env.DEV) {
+      const err = error as AxiosError;
+      if (err.code === 'ERR_NETWORK') {
+        console.error(
+          '[api] Network error — is sayloop-backend running on port 4000? Using proxy:',
+          !resolveApiBase(),
+        );
+      }
     }
     return Promise.reject(error);
   },

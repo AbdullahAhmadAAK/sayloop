@@ -5,7 +5,9 @@ import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import { getTopic } from '@/constants/topics';
 import {
+  ensureCoachAnalysisStarted,
   loadPendingCoach,
+  retryCoachAnalysis,
   subscribeCoachSession,
   type CoachMetrics,
   type PendingCoachSession,
@@ -74,8 +76,10 @@ export default function SessionReviewScreen({
   const [metrics, setMetrics] = useState<CoachMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   useEffect(() => {
+    ensureCoachAnalysisStarted();
     const setters = {
       setPending,
       setMetrics,
@@ -86,6 +90,17 @@ export default function SessionReviewScreen({
 
     return subscribeCoachSession((p) => applyPending(p, sessionId, setters));
   }, [sessionId]);
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    setLoading(true);
+    setError(null);
+    try {
+      await retryCoachAnalysis();
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   const transcriptPreview = pending
     ? pending.lines
@@ -121,8 +136,23 @@ export default function SessionReviewScreen({
       )}
 
       {!loading && error && (
-        <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
+        <div className="mt-6 space-y-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-left text-sm text-red-700">
+          <p>{error}</p>
+          {error.includes('No speech') ? (
+            <p className="text-xs text-red-600/80">
+              Tip: use Chrome or Edge, allow the microphone, and speak clearly during the debate.
+              Your partner&apos;s audio is not recorded — only your side.
+            </p>
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={retrying}
+              onClick={() => void handleRetry()}
+            >
+              {retrying ? 'Retrying…' : 'Retry analysis'}
+            </Button>
+          )}
         </div>
       )}
 
