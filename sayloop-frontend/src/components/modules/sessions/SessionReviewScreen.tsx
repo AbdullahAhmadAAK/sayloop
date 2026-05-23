@@ -4,6 +4,7 @@ import type { TopicId } from '@/constants/topics';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import { getTopic } from '@/constants/topics';
+import { fetchAiCapabilities } from '@/lib/api';
 import {
   ensureCoachAnalysisStarted,
   loadPendingCoach,
@@ -95,6 +96,13 @@ export default function SessionReviewScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
+  const [serverAiReady, setServerAiReady] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    void fetchAiCapabilities()
+      .then((c) => setServerAiReady(Boolean(c.openai)))
+      .catch(() => setServerAiReady(null));
+  }, []);
 
   useEffect(() => {
     ensureCoachAnalysisStarted();
@@ -173,21 +181,27 @@ export default function SessionReviewScreen({
       {!loading && error && (
         <div className="mt-6 space-y-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-left text-sm text-red-700">
           <p>{error}</p>
-          {error.includes('No speech') ? (
-            <p className="text-xs text-red-600/80">
-              Tip: use Chrome or Edge, allow the microphone, and speak clearly during the debate.
-              Your partner&apos;s audio is not recorded — only your side.
+          {serverAiReady === false && (
+            <p className="text-xs text-red-600/90">
+              Server check: <strong>OPENAI_API_KEY</strong> is missing on AWS. Add it to{' '}
+              <code className="rounded bg-red-100 px-1">sayloop-backend/.env</code>, restart the
+              backend, then tap Retry.
             </p>
-          ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={retrying}
-              onClick={() => void handleRetry()}
-            >
-              {retrying ? 'Retrying…' : 'Retry analysis'}
-            </Button>
           )}
+          {error.includes('No speech') || error.includes('could not detect') ? (
+            <p className="text-xs text-red-600/80">
+              Tip: use Chrome or Edge, allow the microphone, stay unmuted, and speak for most of the
+              minute. Only your mic is recorded — not your partner.
+            </p>
+          ) : null}
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={retrying}
+            onClick={() => void handleRetry()}
+          >
+            {retrying ? 'Retrying…' : 'Retry analysis'}
+          </Button>
         </div>
       )}
 

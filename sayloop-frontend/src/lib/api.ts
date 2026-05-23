@@ -113,10 +113,16 @@ async function authHeaders(): Promise<HeadersInit> {
   return headers;
 }
 
+function normalizeUploadMime(blob: Blob): string {
+  const base = (blob.type || 'audio/webm').split(';')[0].trim();
+  return base.startsWith('audio/') ? base : 'audio/webm';
+}
+
 /** Raw audio upload — works better on AWS than large JSON base64. */
 export async function fetchTranscribeDebate(audio: Blob) {
+  const mime = normalizeUploadMime(audio);
   const url = `${getApiRoot()}/ai/transcribe-debate`;
-  const mime = audio.type || 'audio/webm';
+  let lastError: Error | null = null;
 
   try {
     const res = await fetch(url, {
@@ -142,19 +148,36 @@ export async function fetchTranscribeDebate(audio: Blob) {
     }
     return { success: Boolean(data.success), text: data.text ?? '', source: data.source ?? '' };
   } catch (rawErr) {
-    const msg = rawErr instanceof Error ? rawErr.message : String(rawErr);
+    lastError = rawErr instanceof Error ? rawErr : new Error(String(rawErr));
     if (import.meta.env.DEV) {
-      console.warn('[api] raw transcribe failed, trying base64:', msg);
-    } else if (!msg.includes('Failed to fetch') && !msg.includes('NetworkError')) {
-      console.warn('[api] raw transcribe failed, trying base64:', msg);
+      console.warn('[api] raw transcribe failed, trying base64:', lastError.message);
     }
   }
 
-  const audioBase64 = await blobToBase64(audio);
-  const { data } = await api.post<{ success: boolean; text: string; source: string; message?: string }>(
-    '/ai/transcribe-debate',
-    { audioBase64, mimeType: mime },
-    { timeout: 120000 },
+  try {
+    const audioBase64 = await blobToBase64(audio);
+    const { data } = await api.post<{
+      success: boolean;
+      text: string;
+      source: string;
+      message?: string;
+    }>(
+      '/ai/transcribe-debate',
+      { audioBase64, mimeType: mime },
+      { timeout: 120000 },
+    );
+    return data;
+  } catch (base64Err) {
+    const msg =
+      base64Err instanceof Error ? base64Err.message : String(base64Err);
+    throw new Error(lastError?.message || msg);
+  }
+}
+
+export async function fetchAiCapabilities() {
+  const { data } = await api.get<{ success: boolean; openai: boolean; whisper: boolean }>(
+    '/ai/capabilities',
+    { timeout: 10000 },
   );
   return data;
 }

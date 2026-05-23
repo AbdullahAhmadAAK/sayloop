@@ -70,8 +70,20 @@ async function postTranscribeDebate(req, res, next) {
     res.json({ success: true, ...result });
   } catch (err) {
     console.error('[ai] transcribe-debate', err.message);
+    if (err.status) {
+      return res.status(err.status).json({ success: false, message: err.message });
+    }
     next(err);
   }
+}
+
+async function getAiCapabilities(_req, res) {
+  const { isOpenAIConfigured } = require('./transcribeService');
+  res.json({
+    success: true,
+    openai: isOpenAIConfigured(),
+    whisper: isOpenAIConfigured(),
+  });
 }
 
 module.exports = {
@@ -79,4 +91,5 @@ module.exports = {
   getStuckPrompts,
   postCoachingAnalyze,
   postTranscribeDebate,
+  getAiCapabilities,
 };

@@ -3,6 +3,7 @@ import { getSocket } from '@/lib/socket';
 import { useAppDispatch, useAppSelector } from '@/hooks/useAppDispatch';
 import { setMediaError } from '@/redux/slice/sessionSlice';
 import { startDebateRecording } from '@/lib/debateAudioCapture';
+import { captureDebateAudioBlob } from '@/lib/sessionTranscript';
 
 type SignalPayload = {
   fromUserId: number;
@@ -370,9 +371,8 @@ export function useWebRTC() {
   }, [partnerConnected]);
 
   useEffect(() => {
-    if (phase !== 'joining' && phase !== 'active' && phase !== 'wrapping') {
-      stopMedia();
-    }
+    if (phase === 'joining' || phase === 'active' || phase === 'wrapping') return;
+    void captureDebateAudioBlob().finally(() => stopMedia());
   }, [phase, stopMedia]);
 
   useEffect(() => {

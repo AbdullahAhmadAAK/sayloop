@@ -1,6 +1,6 @@
 import type { TopicId } from '@/constants/topics';
 import { fetchCoachingAnalyze, fetchTranscribeDebate, type CoachingAnalyzeResult } from '@/lib/api';
-import { stopDebateRecording } from '@/lib/debateAudioCapture';
+import { getRecordedBlobSync, normalizeAudioMime, stopDebateRecording } from '@/lib/debateAudioCapture';
 
 const STORAGE_KEY = 'sayloop_pending_coach';
 
@@ -104,6 +104,7 @@ export function initCoachSession(payload: {
   }
 
   analysisPromise = null;
+  cachedAudioBlob = null;
   savePendingCoach({
     sessionId: sid,
     topic: payload.topic,
@@ -130,18 +131,20 @@ export function finalizeCoachSession(sessionId: string, durationSeconds: number)
   pending.analysisError = undefined;
   savePendingCoach(pending);
   notifyListeners();
-  if (cachedAudioBlob && cachedAudioBlob.size >= 800) {
-    scheduleCoachAnalysis(ANALYSIS_DELAY_MS);
-  } else {
-    void captureDebateAudioBlob().then(() => scheduleCoachAnalysis(ANALYSIS_DELAY_MS));
-  }
+  void captureDebateAudioBlob().then(() => scheduleCoachAnalysis(ANALYSIS_DELAY_MS));
 }
 
 export async function captureDebateAudioBlob() {
   try {
-    cachedAudioBlob = await stopDebateRecording();
+    const blob = (await stopDebateRecording()) ?? getRecordedBlobSync();
+    if (blob && blob.size >= 256) {
+      cachedAudioBlob = blob;
+    }
   } catch {
-    cachedAudioBlob = null;
+    const fallback = getRecordedBlobSync();
+    if (fallback && fallback.size >= 256) {
+      cachedAudioBlob = fallback;
+    }
   }
 }
 
@@ -153,48 +156,72 @@ export function scheduleCoachAnalysis(delayMs = ANALYSIS_DELAY_MS) {
   setTimeout(() => void startCoachAnalysis(), delayMs);
 }
 
-async function ensureTranscriptFromAudio() {
-  const pending = loadPendingCoach();
-  if (!pending || getTranscriptText(pending)) return;
-
-  const blob = cachedAudioBlob ?? (await stopDebateRecording());
-  cachedAudioBlob = null;
-  if (!blob || blob.size < 800) return;
-
-  const latest = loadPendingCoach();
-  if (!latest) return;
-
-  try {
-    const res = await fetchTranscribeDebate(blob);
-    const text = res.text?.trim();
-    if (!text) return;
-
-    const updated = loadPendingCoach();
-    if (!updated) return;
-
-    updated.lines = [{ text, at: updated.startedAt }];
-    savePendingCoach(updated);
-    notifyListeners();
-  } catch (err) {
-    console.warn('[coach] Whisper transcribe failed', err);
-    const failed = loadPendingCoach();
-    if (failed && !getTranscriptText(failed)) {
-      failed.analysisError =
-        err instanceof Error
-          ? err.message
-          : 'Could not transcribe audio. Check OPENAI_API_KEY on AWS and CORS.';
-      savePendingCoach(failed);
-      notifyListeners();
-    }
-  }
-}
-
 export function getTranscriptText(pending: PendingCoachSession): string {
   return pending.lines.map((l) => l.text).join(' ').trim();
 }
 
+function userFacingTranscribeError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg.includes('OPENAI_API_KEY') || msg.includes('Speech analysis is unavailable')) {
+    return msg;
+  }
+  if (msg.includes('CORS') || msg.includes('Failed to fetch') || msg.includes('Network')) {
+    return `Cannot reach the API for transcription. Check VITE_API_URL on Vercel and FRONTEND_URL on AWS. (${msg})`;
+  }
+  if (msg.includes('401') || msg.includes('Unauthorized')) {
+    return 'Sign-in expired — refresh the page and try Retry.';
+  }
+  if (msg.includes('413')) {
+    return 'Recording too large for the server. Ask your host to allow uploads up to 12MB.';
+  }
+  return msg || 'Transcription failed. Tap Retry.';
+}
+
+async function ensureTranscriptFromAudio(pending: PendingCoachSession): Promise<string> {
+  const existing = getTranscriptText(pending);
+  if (existing) return existing;
+
+  const blob = cachedAudioBlob ?? (await stopDebateRecording()) ?? getRecordedBlobSync();
+  if (!blob || blob.size < 256) {
+    return '';
+  }
+
+  const latest = loadPendingCoach();
+  if (!latest) return '';
+
+  try {
+    const uploadBlob =
+      blob.type && blob.type !== normalizeAudioMime(blob.type)
+        ? new Blob([blob], { type: normalizeAudioMime(blob.type) })
+        : blob;
+
+    const res = await fetchTranscribeDebate(uploadBlob);
+    const text = res.text?.trim();
+    if (!text) {
+      return getTranscriptText(latest);
+    }
+
+    const updated = loadPendingCoach();
+    if (!updated) return text;
+
+    updated.lines = [{ text, at: updated.startedAt }];
+    savePendingCoach(updated);
+    notifyListeners();
+    cachedAudioBlob = null;
+    return text;
+  } catch (err) {
+    console.warn('[coach] Whisper transcribe failed', err);
+    const failed = loadPendingCoach();
+    if (failed && !getTranscriptText(failed)) {
+      failed.analysisError = userFacingTranscribeError(err);
+      savePendingCoach(failed);
+      notifyListeners();
+    }
+    throw err;
+  }
+}
+
 /** Runs GPT analysis in the background as soon as the debate ends. */
-/** @deprecated Use analysis flow via startCoachAnalysis — kept for hot-reload compatibility */
 export function markCoachAnalyzed(coachingNarrative?: string, metrics?: CoachMetrics) {
   const pending = loadPendingCoach();
   if (!pending) return;
@@ -211,7 +238,12 @@ export function ensureCoachAnalysisStarted() {
   if (!pending) return;
   if (pending.analysisStatus === 'done' || pending.analysisStatus === 'running') return;
   if (pending.endedAt > 0 || pending.durationSeconds > 0) {
-    if (pending.analysisStatus === 'error' && !getTranscriptText(pending)) return;
+    if (pending.analysisStatus === 'error' && pending.analysisError?.includes('OPENAI_API_KEY')) {
+      return;
+    }
+    if (pending.analysisStatus === 'error' && !getTranscriptText(pending) && !cachedAudioBlob) {
+      return;
+    }
     scheduleCoachAnalysis(pending.analysisStatus === 'error' ? 300 : 0);
   }
 }
@@ -228,11 +260,28 @@ export function retryCoachAnalysis(): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(() => {
       void (async () => {
-        await ensureTranscriptFromAudio();
+        await captureDebateAudioBlob();
         await startCoachAnalysis();
       })().finally(resolve);
     }, 500);
   });
+}
+
+async function resolveTranscript(pending: PendingCoachSession): Promise<string> {
+  const fromLines = getTranscriptText(pending);
+  if (fromLines.length >= 3) {
+    return fromLines;
+  }
+
+  try {
+    const fromWhisper = await ensureTranscriptFromAudio(pending);
+    if (fromWhisper) return fromWhisper;
+  } catch (err) {
+    if (fromLines) return fromLines;
+    throw err;
+  }
+
+  return getTranscriptText(loadPendingCoach() ?? pending) || fromLines;
 }
 
 export function startCoachAnalysis(): Promise<void> {
@@ -246,26 +295,36 @@ export function startCoachAnalysis(): Promise<void> {
       return;
     }
 
-    let transcript = getTranscriptText(pending);
-    if (!transcript) {
-      await ensureTranscriptFromAudio();
-      transcript = getTranscriptText(loadPendingCoach() ?? pending);
+    pending.analysisStatus = 'running';
+    pending.analysisError = undefined;
+    savePendingCoach(pending);
+    notifyListeners();
+
+    let transcript = '';
+    try {
+      transcript = await resolveTranscript(pending);
+    } catch (err) {
+      pending = loadPendingCoach() ?? pending;
+      pending.analysisStatus = 'error';
+      pending.analysisError = userFacingTranscribeError(err);
+      savePendingCoach(pending);
+      notifyListeners();
+      return;
     }
 
-    if (!transcript) {
+    if (!transcript || transcript.length < 3) {
+      pending = loadPendingCoach() ?? pending;
       pending.analysisStatus = 'error';
-      pending.analysisError =
-        'No speech was captured. Allow the microphone, speak during the debate (unmuted), then tap Retry. Coaching uses your mic recording via Whisper.';
+      const hadAudio = Boolean(cachedAudioBlob && cachedAudioBlob.size >= 256);
+      pending.analysisError = hadAudio
+        ? 'We heard audio but could not detect clear speech. Speak louder, closer to the mic, for the full minute, then tap Retry.'
+        : 'No speech was captured. Allow the microphone in Chrome/Edge, stay unmuted during the debate, then tap Retry.';
       savePendingCoach(pending);
       notifyListeners();
       return;
     }
 
     pending = loadPendingCoach() ?? pending;
-    pending.analysisStatus = 'running';
-    pending.analysisError = undefined;
-    savePendingCoach(pending);
-    notifyListeners();
 
     try {
       const res = await fetchCoachingAnalyze({

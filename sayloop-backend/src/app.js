@@ -49,10 +49,13 @@ function createApp() {
       }
     }
 
+    const openaiConfigured = Boolean(process.env.OPENAI_API_KEY?.trim());
+
     res.json({
       ok: true,
       service: 'sayloop-backend',
       database,
+      openai: openaiConfigured,
       timestamp: new Date().toISOString(),
     });
   });
