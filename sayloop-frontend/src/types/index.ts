@@ -25,7 +25,7 @@ export type MatchMode =
   | 'matched'
   | 'confirmed';
 
-export type SessionPhase = 'joining' | 'active' | 'ended';
+export type SessionPhase = 'joining' | 'active' | 'wrapping' | 'ended';
 
 export type DebateOutcome = 'WIN' | 'LOSS' | 'DRAW' | 'COMPLETE';
 

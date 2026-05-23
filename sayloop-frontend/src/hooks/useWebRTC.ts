@@ -223,7 +223,8 @@ export function useWebRTC() {
   }, [remoteStream]);
 
   useEffect(() => {
-    const inSession = (phase === 'joining' || phase === 'active') && sessionId;
+    const inSession =
+      (phase === 'joining' || phase === 'active' || phase === 'wrapping') && sessionId;
     if (!inSession) return;
 
     const boundSessionId = sessionId;
@@ -369,7 +370,7 @@ export function useWebRTC() {
   }, [partnerConnected]);
 
   useEffect(() => {
-    if (phase !== 'joining' && phase !== 'active') {
+    if (phase !== 'joining' && phase !== 'active' && phase !== 'wrapping') {
       stopMedia();
     }
   }, [phase, stopMedia]);

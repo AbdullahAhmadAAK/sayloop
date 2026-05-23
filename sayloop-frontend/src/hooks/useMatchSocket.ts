@@ -33,16 +33,16 @@ import {
   sessionStarted,
   setDrawOfferIncoming,
   setDrawOfferPending,
+  setSessionWrapping,
   setTimer,
   setWaitingForPartner,
 } from '@/redux/slice/sessionSlice';
 import { setXpFromServer } from '@/redux/slice/economySlice';
 import {
+  captureDebateAudioBlob,
   finalizeCoachSession,
-  getTranscriptText,
   initCoachSession,
   loadPendingCoach,
-  savePendingCoach,
 } from '@/lib/sessionTranscript';
 import type { DebateOutcome } from '@/types';
 import type { MatchRequest } from '@/types';
@@ -180,6 +180,10 @@ function bindSocketListeners(
 
   let sessionEndHandled = false;
 
+  const onWrapping = () => {
+    dispatch(setSessionWrapping());
+  };
+
   const onSessionEnd = (payload: {
     outcome: DebateOutcome;
     xpEarned: number;
@@ -191,7 +195,26 @@ function bindSocketListeners(
     sessionEndHandled = true;
 
     const sid = payload.sessionId ?? loadPendingCoach()?.sessionId;
-    if (sid) {
+
+    const finishUi = () => {
+      dispatch(
+        endSession({
+          outcome: payload.outcome,
+          xpEarned: payload.xpEarned,
+          partnerName: payload.partnerName,
+          topic: payload.topic,
+        }),
+      );
+      navigate('/session', {
+        replace: true,
+        state: { sessionId: sid, endedAt: Date.now() },
+      });
+    };
+
+    finishUi();
+
+    void (async () => {
+      if (!sid) return;
       let pending = loadPendingCoach();
       if (!pending) {
         initCoachSession({
@@ -201,29 +224,13 @@ function bindSocketListeners(
         });
         pending = loadPendingCoach();
       }
-      if (pending && pending.analysisStatus === 'error' && getTranscriptText(pending)) {
-        pending.analysisStatus = 'idle';
-        pending.analysisError = undefined;
-        savePendingCoach(pending);
-      }
+      await captureDebateAudioBlob();
       const duration =
         pending && pending.startedAt
           ? Math.max(1, Math.round((Date.now() - pending.startedAt) / 1000))
           : 60;
       finalizeCoachSession(sid, duration);
-    }
-
-    dispatch(
-      endSession({
-        outcome: payload.outcome,
-        xpEarned: payload.xpEarned,
-        partnerName: payload.partnerName,
-        topic: payload.topic,
-      }),
-    );
-    if (!getPage().startsWith('/session')) {
-      navigate('/session', { replace: true });
-    }
+    })();
   };
 
   const onEconomy = (payload: { xp: number; xpDelta: number }) => {
@@ -265,6 +272,7 @@ function bindSocketListeners(
   s.on('match:session-start', onSessionStart);
   s.on('session:start', onDebateStart);
   s.on('session:timer', onTimer);
+  s.on('session:wrapping', onWrapping);
   s.on('session:end', onSessionEnd);
   s.on('economy:update', onEconomy);
   s.on('session:joined', onSessionJoined);
@@ -284,6 +292,7 @@ function bindSocketListeners(
     s.off('match:session-start', onSessionStart);
     s.off('session:start', onDebateStart);
     s.off('session:timer', onTimer);
+    s.off('session:wrapping', onWrapping);
     s.off('session:end', onSessionEnd);
     s.off('economy:update', onEconomy);
     s.off('session:joined', onSessionJoined);

@@ -48,15 +48,28 @@ async function postCoachingAnalyze(req, res, next) {
 
 async function postTranscribeDebate(req, res, next) {
   try {
-    const { audioBase64, mimeType } = req.body || {};
-    if (!audioBase64) {
-      return res.status(400).json({ success: false, message: 'audioBase64 required' });
+    let buffer = null;
+    let mimeType = 'audio/webm';
+
+    if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+      buffer = req.body;
+      mimeType = req.headers['content-type'] || mimeType;
+    } else {
+      const { audioBase64, mimeType: bodyMime } = req.body || {};
+      if (!audioBase64) {
+        return res.status(400).json({
+          success: false,
+          message: 'Send audio as raw body (Content-Type: audio/webm) or JSON audioBase64',
+        });
+      }
+      buffer = Buffer.from(String(audioBase64), 'base64');
+      mimeType = bodyMime || mimeType;
     }
 
-    const buffer = Buffer.from(String(audioBase64), 'base64');
-    const result = await transcribeDebateAudio(buffer, mimeType || 'audio/webm');
+    const result = await transcribeDebateAudio(buffer, mimeType);
     res.json({ success: true, ...result });
   } catch (err) {
+    console.error('[ai] transcribe-debate', err.message);
     next(err);
   }
 }

@@ -56,6 +56,10 @@ function isOriginAllowed(origin) {
     return true;
   }
 
+  if (isProd && origin.startsWith('https://') && origin.includes('vercel.app')) {
+    return true;
+  }
+
   return false;
 }
 

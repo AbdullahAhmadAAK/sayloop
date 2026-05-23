@@ -118,7 +118,7 @@ export function initCoachSession(payload: {
   notifyListeners();
 }
 
-const ANALYSIS_DELAY_MS = 2000;
+const ANALYSIS_DELAY_MS = 400;
 
 export function finalizeCoachSession(sessionId: string, durationSeconds: number) {
   const pending = loadPendingCoach();
@@ -174,6 +174,15 @@ async function ensureTranscriptFromAudio() {
     notifyListeners();
   } catch (err) {
     console.warn('[coach] Whisper transcribe failed', err);
+    const failed = loadPendingCoach();
+    if (failed && !getTranscriptText(failed)) {
+      failed.analysisError =
+        err instanceof Error
+          ? err.message
+          : 'Could not transcribe audio. Check OPENAI_API_KEY on AWS and CORS.';
+      savePendingCoach(failed);
+      notifyListeners();
+    }
   }
 }
 

@@ -28,17 +28,23 @@ function outcomeForUser(endType, userId, resignerId) {
 
 async function applySessionRewards(match, endType, resignerId = null) {
   const userIds = [match.requesterId, match.receiverId];
-  const results = {};
 
-  for (const uid of userIds) {
-    const delta = xpDeltaForUser(endType, uid, resignerId);
-    const xp = await usersRepo.addXp(uid, delta);
-    results[uid] = {
-      userId: uid,
-      xpEarned: delta,
-      totalXp: xp,
-      outcome: outcomeForUser(endType, uid, resignerId),
-    };
+  const entries = await Promise.all(
+    userIds.map(async (uid) => {
+      const delta = xpDeltaForUser(endType, uid, resignerId);
+      const xp = await usersRepo.addXp(uid, delta);
+      return {
+        userId: uid,
+        xpEarned: delta,
+        totalXp: xp,
+        outcome: outcomeForUser(endType, uid, resignerId),
+      };
+    }),
+  );
+
+  const results = {};
+  for (const entry of entries) {
+    results[entry.userId] = entry;
   }
 
   await matchesRepo.markSessionEnded(match.id);

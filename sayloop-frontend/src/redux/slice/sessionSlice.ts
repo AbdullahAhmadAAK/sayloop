@@ -85,6 +85,12 @@ const sessionSlice = createSlice({
     },
     setTimer(state, action: PayloadAction<number>) {
       state.timerSeconds = action.payload;
+      if (action.payload <= 0 && state.phase === 'active') {
+        state.phase = 'wrapping';
+      }
+    },
+    setSessionWrapping(state) {
+      if (state.phase === 'active') state.phase = 'wrapping';
     },
     toggleMute(state) {
       state.isMuted = !state.isMuted;
@@ -139,6 +145,7 @@ export const {
   sessionStarted,
   tickTimer,
   setTimer,
+  setSessionWrapping,
   toggleMute,
   toggleCamera,
   setDrawOfferPending,

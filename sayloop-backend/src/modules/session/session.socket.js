@@ -24,16 +24,22 @@ async function endSession(io, state, endType, resignerId = null) {
   state.ended = true;
   sessionStore.clearTimer(state);
 
-  const match = await sessionService.getMatchForSession(state.sessionId);
+  const sessionId = state.sessionId;
+  io.to(sessionId).emit('session:timer', { remainingSeconds: 0 });
+  io.to(sessionId).emit('session:wrapping', { sessionId });
+
+  const match = await sessionService.getMatchForSession(sessionId);
   if (!match) {
-    sessionStore.destroySession(state.sessionId);
+    sessionStore.destroySession(sessionId);
     return;
   }
 
-  const results = await sessionService.applySessionRewards(match, endType, resignerId);
   const usersRepo = require('../../db/users.repo');
-  const requester = await usersRepo.findById(match.requesterId);
-  const receiver = await usersRepo.findById(match.receiverId);
+  const [results, requester, receiver] = await Promise.all([
+    sessionService.applySessionRewards(match, endType, resignerId),
+    usersRepo.findById(match.requesterId),
+    usersRepo.findById(match.receiverId),
+  ]);
   const topicMeta = getTopic(match.topic);
 
   const endPayloadBase = {

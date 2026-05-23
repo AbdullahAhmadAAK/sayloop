@@ -3,6 +3,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import PageShell from '@/components/layout/PageShell';
 import MatchmakingScreen from '@/components/modules/sessions/MatchmakingScreen';
 import SessionScreen from '@/components/modules/sessions/SessionScreen';
+import WrappingScreen from '@/components/modules/sessions/WrappingScreen';
 import SessionSummaryScreen from '@/components/modules/sessions/SessionSummaryScreen';
 import SessionReviewScreen from '@/components/modules/sessions/SessionReviewScreen';
 import { useAppDispatch, useAppSelector } from '@/hooks/useAppDispatch';
@@ -19,22 +20,27 @@ export default function SessionPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { phase, result, sessionId, topic, timerSeconds } = useAppSelector((s) => s.session);
-  const stateSessionId = (location.state as { sessionId?: string } | null)?.sessionId;
-  const sessionIdRef = useRef<string | null>(null);
+  const { phase, result, sessionId, topic } = useAppSelector((s) => s.session);
+  const stateSessionId = (location.state as { sessionId?: string; endedAt?: number } | null)
+    ?.sessionId;
   const [postGameView, setPostGameView] = useState<PostGameView>('summary');
+  const [pageKey, setPageKey] = useState(0);
 
   const activeSessionId = sessionId || stateSessionId || null;
+  const sessionIdRef = useRef<string | null>(null);
   sessionIdRef.current = activeSessionId;
   const { tryJoin } = useSessionRoom();
 
   const captureSpeech =
-    Boolean(activeSessionId) && (phase === 'joining' || phase === 'active');
+    Boolean(activeSessionId) &&
+    (phase === 'joining' || phase === 'active' || phase === 'wrapping');
   useSpeechCapture(captureSpeech, activeSessionId);
 
   useEffect(() => {
     if (phase === 'ended') {
       setPostGameView('summary');
+      setPageKey((k) => k + 1);
+      window.scrollTo(0, 0);
       ensureCoachAnalysisStarted();
     }
   }, [phase, result?.outcome]);
@@ -42,9 +48,9 @@ export default function SessionPage() {
   useEffect(() => {
     return () => {
       const sid = sessionIdRef.current;
-      if (sid) leaveDebateSession(sid);
+      if (sid && phase !== 'ended') leaveDebateSession(sid);
     };
-  }, []);
+  }, [phase]);
 
   const handleLeaveHome = () => {
     clearPendingCoach();
@@ -60,7 +66,7 @@ export default function SessionPage() {
   if (phase === 'ended' && result) {
     if (postGameView === 'review') {
       return (
-        <PageShell title="Review" hideRight>
+        <PageShell key={`review-${pageKey}`} title="Review" hideRight>
           <SessionReviewScreen
             result={result}
             sessionId={activeSessionId}
@@ -73,7 +79,7 @@ export default function SessionPage() {
     }
 
     return (
-      <PageShell title="Game over" hideRight>
+      <PageShell key={`summary-${pageKey}`} title="Game over" hideRight>
         <SessionSummaryScreen
           result={result}
           topic={result.topic ?? topic}
@@ -84,8 +90,16 @@ export default function SessionPage() {
     );
   }
 
+  if (phase === 'wrapping') {
+    return (
+      <PageShell title="Live debate" hideRight>
+        <WrappingScreen />
+      </PageShell>
+    );
+  }
+
   return (
-    <PageShell title="Live debate" hideRight>
+    <PageShell key={`live-${activeSessionId}`} title="Live debate" hideRight>
       {phase === 'joining' && <MatchmakingScreen onRetry={tryJoin} />}
       {phase === 'active' && <SessionScreen />}
     </PageShell>

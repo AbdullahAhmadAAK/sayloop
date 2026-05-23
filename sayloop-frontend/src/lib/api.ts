@@ -6,7 +6,7 @@ const root = resolveApiBase();
 export const api = axios.create({
   baseURL: root ? `${root}/api` : '/api',
   headers: { 'Content-Type': 'application/json' },
-  timeout: 15000,
+  timeout: 30000,
   withCredentials: true,
 });
 
@@ -14,6 +14,10 @@ let tokenGetter: (() => Promise<string | null>) | null = null;
 
 export function setTokenGetter(getter: () => Promise<string | null>) {
   tokenGetter = getter;
+}
+
+export function getApiRoot(): string {
+  return root ? `${root}/api` : '/api';
 }
 
 api.interceptors.request.use(async (config) => {
@@ -32,10 +36,13 @@ export function getApiErrorMessage(error: unknown): string {
     if (import.meta.env.DEV) {
       return 'Cannot reach API. Start backend: cd sayloop-backend && npm run dev (port 4000).';
     }
-    return 'Cannot reach server. Check VITE_API_URL and that the API is running.';
+    return `Cannot reach API at ${resolveApiBase() || 'server'}. Check VITE_API_URL on Vercel and that AWS is running.`;
+  }
+  if (err.response?.status === 413) {
+    return 'Audio upload too large for the server. Try a shorter debate.';
   }
   if (err.response?.status === 403 || err.message?.includes('CORS')) {
-    return 'CORS blocked this request. Set FRONTEND_URL on the API to match this site URL.';
+    return 'CORS blocked this request. Set FRONTEND_URL on AWS to your Vercel URL.';
   }
   return err.response?.data?.message ?? err.message ?? 'Request failed';
 }
@@ -46,10 +53,7 @@ api.interceptors.response.use(
     if (import.meta.env.DEV) {
       const err = error as AxiosError;
       if (err.code === 'ERR_NETWORK') {
-        console.error(
-          '[api] Network error — is sayloop-backend running on port 4000? Using proxy:',
-          !resolveApiBase(),
-        );
+        console.error('[api] Network error — backend URL:', resolveApiBase() || '(vite proxy)');
       }
     }
     return Promise.reject(error);
@@ -100,27 +104,68 @@ export type CoachingAnalyzeResult = {
   source: 'openai' | 'fallback';
 };
 
+async function authHeaders(): Promise<HeadersInit> {
+  const headers: HeadersInit = {};
+  if (tokenGetter) {
+    const token = await tokenGetter();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+
+/** Raw audio upload — works better on AWS than large JSON base64. */
+export async function fetchTranscribeDebate(audio: Blob) {
+  const url = `${getApiRoot()}/ai/transcribe-debate`;
+  const mime = audio.type || 'audio/webm';
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...(await authHeaders()),
+        'Content-Type': mime,
+      },
+      body: audio,
+      credentials: 'include',
+      mode: 'cors',
+    });
+
+    const data = (await res.json()) as {
+      success?: boolean;
+      text?: string;
+      source?: string;
+      message?: string;
+    };
+
+    if (!res.ok) {
+      throw new Error(data.message || `Transcribe failed (${res.status})`);
+    }
+    return { success: Boolean(data.success), text: data.text ?? '', source: data.source ?? '' };
+  } catch (rawErr) {
+    if (import.meta.env.DEV) {
+      console.warn('[api] raw transcribe failed, trying base64', rawErr);
+    }
+  }
+
+  const audioBase64 = await blobToBase64(audio);
+  const { data } = await api.post<{ success: boolean; text: string; source: string; message?: string }>(
+    '/ai/transcribe-debate',
+    { audioBase64, mimeType: mime },
+    { timeout: 120000 },
+  );
+  return data;
+}
+
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onloadend = () => {
       const dataUrl = reader.result as string;
-      const base64 = dataUrl.split(',')[1] ?? '';
-      resolve(base64);
+      resolve(dataUrl.split(',')[1] ?? '');
     };
     reader.onerror = reject;
     reader.readAsDataURL(blob);
   });
-}
-
-export async function fetchTranscribeDebate(audio: Blob) {
-  const audioBase64 = await blobToBase64(audio);
-  const { data } = await api.post<{ success: boolean; text: string; source: string }>(
-    '/ai/transcribe-debate',
-    { audioBase64, mimeType: audio.type || 'audio/webm' },
-    { timeout: 90000 },
-  );
-  return data;
 }
 
 export async function fetchCoachingAnalyze(body: {
@@ -131,7 +176,7 @@ export async function fetchCoachingAnalyze(body: {
   sessionStartMs?: number;
 }) {
   const { data } = await api.post<CoachingAnalyzeResult>('/ai/coaching-analyze', body, {
-    timeout: 45000,
+    timeout: 120000,
   });
   return data;
 }
