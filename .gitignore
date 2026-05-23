@@ -1,11 +1,15 @@
-node_modules
-dist
+node_modules/
+dist/
 .env
 .env.local
 *.log
 .DS_Store
 .vercel
+
+# Legacy monorepo layout (not used)
+packages/
 sayloop-repo/
-sayloop-backend/
-sayloop-frontend/
-node_modules/
+
+# Per-app secrets (never commit)
+sayloop-backend/.env
+sayloop-frontend/.env.local

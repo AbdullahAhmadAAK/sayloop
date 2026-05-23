@@ -45,6 +45,12 @@ export default function OnboardingPage() {
     }
   }, [authLoaded, isSignedIn, step]);
 
+  useEffect(() => {
+    if (onboardingComplete) {
+      navigate('/home', { replace: true });
+    }
+  }, [onboardingComplete, navigate]);
+
   if (!authLoaded) {
     return <LoadingScreen />;
   }
@@ -54,8 +60,7 @@ export default function OnboardingPage() {
   }
 
   if (onboardingComplete) {
-    navigate('/home', { replace: true });
-    return null;
+    return <LoadingScreen />;
   }
 
   const firstName = user?.firstName || user?.username || 'Friend';

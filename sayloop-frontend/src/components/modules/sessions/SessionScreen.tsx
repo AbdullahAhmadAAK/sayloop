@@ -10,7 +10,7 @@ export default function SessionScreen() {
   const dispatch = useAppDispatch();
   const session = useAppSelector((s) => s.session);
   const { offerDraw, acceptDraw, declineDraw, resign } = useSessionRoom();
-  const { localVideoRef, remoteVideoRef, partnerConnected } = useWebRTC();
+  const { localVideoRef, remoteVideoRef, remoteStream, partnerConnected } = useWebRTC();
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 pb-8">
@@ -22,6 +22,7 @@ export default function SessionScreen() {
         partnerName={session.partnerName}
         mediaError={session.mediaError}
         partnerConnected={partnerConnected}
+        hasRemoteStream={Boolean(remoteStream)}
       />
       <ConversationPanel topic={session.topic} timerSeconds={session.timerSeconds} />
       <ControlBar

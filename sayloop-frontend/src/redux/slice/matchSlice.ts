@@ -138,6 +138,7 @@ const matchSlice = createSlice({
       if (state.pendingRequests.some((r) => r.id === action.payload.id)) return;
       state.pendingRequests.unshift(action.payload);
       state.pendingRequestCount = state.pendingRequests.length;
+      state.notification = { request: action.payload };
     },
     removeRequest(state, action: PayloadAction<string>) {
       state.pendingRequests = state.pendingRequests.filter((r) => r.id !== action.payload);

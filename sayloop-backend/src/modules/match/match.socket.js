@@ -7,15 +7,16 @@ const {
 const matchService = require('./match.service');
 
 function emitToUser(io, userId, event, payload) {
-  io.to(`user:${userId}`).emit(event, payload);
+  io.to(`user:${Number(userId)}`).emit(event, payload);
 }
 
 function registerMatchHandlers(io, socket) {
   const userId = socket.dbUserId;
   const dbUser = socket.dbUser;
 
-  setUserOnline(userId, socket.id, dbUser, '/');
-  socket.join(`user:${userId}`);
+  const uid = Number(userId);
+  setUserOnline(uid, socket.id, dbUser, '/');
+  socket.join(`user:${uid}`);
 
   emitToUser(io, userId, 'presence:online-count', {
     count: getOnlineUsers(userId).length,

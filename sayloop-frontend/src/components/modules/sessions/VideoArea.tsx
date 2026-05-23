@@ -8,6 +8,7 @@ type Props = {
   partnerName: string;
   mediaError: string | null;
   partnerConnected?: boolean;
+  hasRemoteStream?: boolean;
 };
 
 export default function VideoArea({
@@ -18,7 +19,9 @@ export default function VideoArea({
   partnerName,
   mediaError,
   partnerConnected,
+  hasRemoteStream,
 }: Props) {
+  const showWaiting = !partnerConnected && !hasRemoteStream;
   return (
     <div className="space-y-3">
       {mediaError && (
@@ -53,7 +56,7 @@ export default function VideoArea({
             autoPlay
             className="h-full w-full object-cover"
           />
-          {!partnerConnected && (
+          {showWaiting && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-ink/80 px-3 text-center">
               <span className="text-3xl">👤</span>
               <p className="mt-2 text-xs font-bold text-white/80">

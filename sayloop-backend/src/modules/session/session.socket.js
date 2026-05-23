@@ -4,7 +4,7 @@ const { SESSION_DURATION_SECONDS } = require('../../config/sessionConfig');
 const { getTopic } = require('../../config/topics');
 
 function emitToUser(io, userId, event, payload) {
-  io.to(`user:${userId}`).emit(event, payload);
+  io.to(`user:${Number(userId)}`).emit(event, payload);
 }
 
 function formatEndPayload(result, topic, partnerNickname) {
@@ -184,10 +184,12 @@ function registerSessionHandlers(io, socket) {
       state.lastOffer = { fromUserId: userId, signal };
     }
 
-    socket.to(sessionId).emit('session:signal', {
-      fromUserId: userId,
-      signal,
-    });
+    const partnerId =
+      userId === state.requesterId ? state.receiverId : state.requesterId;
+
+    const envelope = { fromUserId: userId, signal };
+    emitToUser(io, partnerId, 'session:signal', envelope);
+    socket.to(sessionId).emit('session:signal', envelope);
   });
 
   socket.on('session:webrtc-ready', (payload) => {
@@ -206,12 +208,20 @@ function registerSessionHandlers(io, socket) {
 
     if (
       state.lastOffer &&
-      Number(state.lastOffer.fromUserId) === partnerId &&
-      state.webrtcReady.has(userId)
+      Number(state.lastOffer.fromUserId) === partnerId
     ) {
-      socket.emit('session:signal', {
+      const replay = {
         fromUserId: state.lastOffer.fromUserId,
         signal: state.lastOffer.signal,
+      };
+      emitToUser(io, userId, 'session:signal', replay);
+      socket.emit('session:signal', replay);
+    }
+
+    if (state.webrtcReady.has(partnerId) && state.webrtcReady.has(userId)) {
+      emitToUser(io, userId, 'session:peer-webrtc-ready', {
+        sessionId,
+        fromUserId: partnerId,
       });
     }
   });
