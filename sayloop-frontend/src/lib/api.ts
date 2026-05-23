@@ -142,8 +142,11 @@ export async function fetchTranscribeDebate(audio: Blob) {
     }
     return { success: Boolean(data.success), text: data.text ?? '', source: data.source ?? '' };
   } catch (rawErr) {
+    const msg = rawErr instanceof Error ? rawErr.message : String(rawErr);
     if (import.meta.env.DEV) {
-      console.warn('[api] raw transcribe failed, trying base64', rawErr);
+      console.warn('[api] raw transcribe failed, trying base64:', msg);
+    } else if (!msg.includes('Failed to fetch') && !msg.includes('NetworkError')) {
+      console.warn('[api] raw transcribe failed, trying base64:', msg);
     }
   }
 

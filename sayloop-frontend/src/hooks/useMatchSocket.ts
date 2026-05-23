@@ -176,12 +176,16 @@ function bindSocketListeners(
 
   const onTimer = (payload: { remainingSeconds: number }) => {
     dispatch(setTimer(payload.remainingSeconds));
+    if (payload.remainingSeconds <= 0) {
+      void captureDebateAudioBlob();
+    }
   };
 
   let sessionEndHandled = false;
 
   const onWrapping = () => {
     dispatch(setSessionWrapping());
+    void captureDebateAudioBlob();
   };
 
   const onSessionEnd = (payload: {

@@ -26,6 +26,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         ws: true,
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
+            console.warn('[vite] socket.io proxy error — is backend running on', API_TARGET, '?', err.message);
+          });
+        },
       },
     },
   },

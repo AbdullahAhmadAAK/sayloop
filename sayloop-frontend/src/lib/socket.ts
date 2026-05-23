@@ -32,9 +32,12 @@ export async function connectSocket(): Promise<Socket> {
 
   const common = {
     auth: { token },
-    transports: ['websocket', 'polling'] as ('websocket' | 'polling')[],
+    // Polling first is more reliable in dev (Vite WS proxy) and behind some proxies in prod.
+    transports: ['polling', 'websocket'] as ('websocket' | 'polling')[],
     reconnection: true,
-    reconnectionAttempts: 10,
+    reconnectionAttempts: 15,
+    reconnectionDelay: 800,
+    timeout: 20000,
     withCredentials: true,
   };
 
@@ -43,8 +46,14 @@ export async function connectSocket(): Promise<Socket> {
       path: '/socket.io',
       ...common,
     });
+    if (import.meta.env.DEV) {
+      console.info('[socket] dev proxy → ws://localhost:5173/socket.io (backend must run on :4000)');
+    }
   } else {
     socket = io(connect.url, common);
+    if (import.meta.env.DEV) {
+      console.info('[socket] direct →', connect.url);
+    }
   }
 
   return socket;

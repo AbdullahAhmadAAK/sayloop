@@ -9,7 +9,7 @@ import SessionReviewScreen from '@/components/modules/sessions/SessionReviewScre
 import { useAppDispatch, useAppSelector } from '@/hooks/useAppDispatch';
 import { useSessionRoom } from '@/hooks/useSessionRoom';
 import { leaveDebateSession } from '@/lib/sessionApi';
-import { resetSession } from '@/redux/slice/sessionSlice';
+import { resetSession, tickTimer } from '@/redux/slice/sessionSlice';
 import { resetMatchFlow } from '@/redux/slice/matchSlice';
 import { clearPendingCoach, ensureCoachAnalysisStarted } from '@/lib/sessionTranscript';
 import { useSpeechCapture } from '@/hooks/useSpeechCapture';
@@ -35,6 +35,13 @@ export default function SessionPage() {
     Boolean(activeSessionId) &&
     (phase === 'joining' || phase === 'active' || phase === 'wrapping');
   useSpeechCapture(captureSpeech, activeSessionId);
+
+  // 1-minute countdown while debate is active (server session:timer can resync via setTimer).
+  useEffect(() => {
+    if (phase !== 'active') return;
+    const id = window.setInterval(() => dispatch(tickTimer()), 1000);
+    return () => window.clearInterval(id);
+  }, [phase, dispatch]);
 
   useEffect(() => {
     if (phase === 'ended') {

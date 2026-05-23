@@ -130,8 +130,11 @@ export function finalizeCoachSession(sessionId: string, durationSeconds: number)
   pending.analysisError = undefined;
   savePendingCoach(pending);
   notifyListeners();
-  void captureDebateAudioBlob();
-  scheduleCoachAnalysis(ANALYSIS_DELAY_MS);
+  if (cachedAudioBlob && cachedAudioBlob.size >= 800) {
+    scheduleCoachAnalysis(ANALYSIS_DELAY_MS);
+  } else {
+    void captureDebateAudioBlob().then(() => scheduleCoachAnalysis(ANALYSIS_DELAY_MS));
+  }
 }
 
 export async function captureDebateAudioBlob() {

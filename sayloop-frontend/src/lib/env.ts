@@ -7,8 +7,6 @@
  * Production: set VITE_API_URL (and optionally VITE_SOCKET_URL) to your deployed API.
  */
 
-const LOCAL_API = /^https?:\/\/(localhost|127\.0\.0\.1):4000\/?$/i;
-
 /** Production API when VITE_* is missing from the build (Vercel should set env vars too). */
 const PRODUCTION_API_DEFAULT = 'https://sayloop.ddns.net';
 
@@ -18,13 +16,13 @@ function trimUrl(url: string | undefined): string {
 
 function useViteProxyInDev(): boolean {
   if (!import.meta.env.DEV) return false;
+  if (import.meta.env.VITE_USE_DEV_PROXY === 'true') return true;
   if (import.meta.env.VITE_USE_DEV_PROXY === 'false') return false;
   const api = trimUrl(import.meta.env.VITE_API_URL);
   const socket = trimUrl(import.meta.env.VITE_SOCKET_URL);
-  if (!api && !socket) return true;
-  if (api && LOCAL_API.test(api)) return true;
-  if (!api && socket && LOCAL_API.test(socket)) return true;
-  return false;
+  // Explicit localhost URLs → connect directly to :4000 (avoids flaky Vite WS proxy).
+  if (api || socket) return false;
+  return true;
 }
 
 /** Empty string = relative `/api` (Vite proxy in dev). */

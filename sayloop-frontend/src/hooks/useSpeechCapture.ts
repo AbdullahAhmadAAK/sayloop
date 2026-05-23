@@ -94,6 +94,11 @@ export function useSpeechCapture(enabled: boolean, sessionId: string | null) {
 
     recognition.onerror = (event) => {
       if (event.error === 'no-speech' || event.error === 'aborted') return;
+      // Chrome uses "network" when offline or speech service is blocked — Whisper still works.
+      if (event.error === 'network') {
+        scheduleRestart(2000);
+        return;
+      }
       console.warn('[speech]', event.error);
       if (event.error === 'audio-capture' || event.error === 'not-allowed') {
         scheduleRestart(1200);

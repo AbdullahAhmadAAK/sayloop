@@ -81,7 +81,11 @@ const sessionSlice = createSlice({
       }
     },
     tickTimer(state) {
-      if (state.timerSeconds > 0) state.timerSeconds -= 1;
+      if (state.timerSeconds <= 0) return;
+      state.timerSeconds -= 1;
+      if (state.timerSeconds <= 0 && state.phase === 'active') {
+        state.phase = 'wrapping';
+      }
     },
     setTimer(state, action: PayloadAction<number>) {
       state.timerSeconds = action.payload;
