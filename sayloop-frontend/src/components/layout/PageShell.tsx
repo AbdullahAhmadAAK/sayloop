@@ -14,7 +14,7 @@ export default function PageShell({ children, title, hideRight }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-cream">
+    <div className="flex min-h-screen bg-cream text-ink">
       <Sidebar />
 
       {menuOpen && (
@@ -34,7 +34,9 @@ export default function PageShell({ children, title, hideRight }: Props) {
       <div className="flex min-h-screen flex-1 flex-col pb-20 lg:pb-0">
         <TopBar title={title} onMenuOpen={() => setMenuOpen(true)} />
         <div className="flex flex-1">
-          <main className="flex-1 px-4 py-6 sm:px-6 lg:py-8">{children}</main>
+          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8">
+            {children}
+          </main>
           {!hideRight && <RightSidebar />}
         </div>
         <MobileNav />

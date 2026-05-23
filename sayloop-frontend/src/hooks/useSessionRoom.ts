@@ -62,8 +62,35 @@ export function useSessionRoom() {
     return () => clearInterval(retry);
   }, [sessionId, phase, tryJoin]);
 
+  useEffect(() => {
+    const s = getSocket();
+    if (!s || !sessionId) return;
+
+    const onDrawOffered = (payload: { sessionId?: string }) => {
+      if (payload?.sessionId && payload.sessionId !== sessionId) return;
+      dispatch(setDrawOfferIncoming(true));
+    };
+
+    const onDrawDeclined = (payload: { sessionId?: string }) => {
+      if (payload?.sessionId && payload.sessionId !== sessionId) return;
+      dispatch(setDrawOfferPending(false));
+      dispatch(setToast('Partner declined the draw'));
+    };
+
+    s.on('session:draw-offered', onDrawOffered);
+    s.on('session:draw-declined', onDrawDeclined);
+
+    return () => {
+      s.off('session:draw-offered', onDrawOffered);
+      s.off('session:draw-declined', onDrawDeclined);
+    };
+  }, [sessionId, dispatch]);
+
   const offerDraw = async () => {
-    if (!sessionId) return;
+    if (!sessionId || phase !== 'active') {
+      dispatch(setToast('Join the debate room first'));
+      return;
+    }
     dispatch(setDrawOfferPending(true));
     const res = await emitSession('session:offer-draw', { sessionId });
     if (!res.ok) {
@@ -73,9 +100,13 @@ export function useSessionRoom() {
   };
 
   const acceptDraw = async () => {
-    if (!sessionId) return;
-    await emitSession('session:accept-draw', { sessionId });
+    if (!sessionId || phase !== 'active') return;
+    const res = await emitSession('session:accept-draw', { sessionId });
     dispatch(setDrawOfferIncoming(false));
+    dispatch(setDrawOfferPending(false));
+    if (!res.ok) {
+      dispatch(setToast(res.message || 'Could not accept draw'));
+    }
   };
 
   const declineDraw = () => {
@@ -85,7 +116,10 @@ export function useSessionRoom() {
   };
 
   const resign = async () => {
-    if (!sessionId) return;
+    if (!sessionId || phase !== 'active') {
+      dispatch(setToast('Join the debate room first'));
+      return;
+    }
     const res = await emitSession('session:resign', { sessionId });
     if (!res.ok) dispatch(setToast(res.message || 'Could not resign'));
   };

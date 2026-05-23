@@ -25,7 +25,7 @@ export default function ControlBar({
   onDeclineDraw,
   onResign,
 }: Props) {
-  const btn =
+  const mediaBtn =
     'flex h-12 w-12 items-center justify-center rounded-full bg-white text-lg shadow-sm transition hover:bg-cream';
 
   return (
@@ -45,10 +45,10 @@ export default function ControlBar({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-center gap-3">
+      <div className="flex items-center justify-center gap-3">
         <button
           type="button"
-          className={btn}
+          className={mediaBtn}
           onClick={onToggleMute}
           aria-label="Toggle mute"
           title={isMuted ? 'Unmute' : 'Mute'}
@@ -57,24 +57,26 @@ export default function ControlBar({
         </button>
         <button
           type="button"
-          className={btn}
+          className={mediaBtn}
           onClick={onToggleCamera}
           aria-label="Toggle camera"
           title={isCameraOff ? 'Turn camera on' : 'Turn camera off'}
         >
           {isCameraOff ? '📷' : '📹'}
         </button>
-        <button
-          type="button"
-          className={`${btn} ${drawOfferPending ? 'ring-2 ring-gold' : ''}`}
-          onClick={onOfferDraw}
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Button
+          variant="secondary"
+          fullWidth
           disabled={drawOfferPending || drawOfferIncoming}
-          aria-label="Offer draw"
-          title="Offer draw (+25 XP each)"
+          onClick={onOfferDraw}
+          className={drawOfferPending ? 'ring-2 ring-gold' : ''}
         >
-          🤝
-        </button>
-        <Button variant="danger" size="sm" onClick={onResign}>
+          {drawOfferPending ? 'Draw offered…' : 'Offer draw'}
+        </Button>
+        <Button variant="danger" fullWidth onClick={onResign}>
           Resign
         </Button>
       </div>

@@ -36,15 +36,21 @@ async function endSession(io, state, endType, resignerId = null) {
   const receiver = await usersRepo.findById(match.receiverId);
   const topicMeta = getTopic(match.topic);
 
+  const endPayloadBase = {
+    reason: endType,
+    topicLabel: topicMeta?.label,
+    topicPrompt: topicMeta?.prompt,
+    sessionId: state.sessionId,
+  };
+
   for (const uid of [match.requesterId, match.receiverId]) {
     const partner = uid === match.requesterId ? receiver : requester;
     const result = results[uid];
-    emitToUser(io, uid, 'session:end', {
+    const payload = {
       ...formatEndPayload(result, match.topic, partner?.nickname || 'Partner'),
-      reason: endType,
-      topicLabel: topicMeta?.label,
-      topicPrompt: topicMeta?.prompt,
-    });
+      ...endPayloadBase,
+    };
+    emitToUser(io, uid, 'session:end', payload);
     emitToUser(io, uid, 'economy:update', { xp: result.totalXp, xpDelta: result.xpEarned });
   }
 
@@ -237,7 +243,7 @@ function registerSessionHandlers(io, socket) {
         userId,
       );
 
-      state.drawOfferFromUserId = userId;
+      state.drawOfferFromUserId = Number(userId);
       const partnerId =
         userId === state.requesterId ? state.receiverId : state.requesterId;
 
@@ -255,7 +261,12 @@ function registerSessionHandlers(io, socket) {
       const state = sessionStore.getSession(sessionId);
       if (!state || state.ended) throw new Error('Session not active');
 
-      if (!state.drawOfferFromUserId || state.drawOfferFromUserId === userId) {
+      const match = await sessionService.getMatchForSession(sessionId);
+      await sessionService.assertParticipant(match, userId);
+
+      const offererId = Number(state.drawOfferFromUserId);
+      const uid = Number(userId);
+      if (!offererId || offererId === uid) {
         throw new Error('No draw offer to accept');
       }
 
@@ -289,7 +300,7 @@ function registerSessionHandlers(io, socket) {
         userId,
       );
 
-      await endSession(io, state, 'RESIGN', userId);
+      await endSession(io, state, 'RESIGN', Number(userId));
       if (typeof ack === 'function') ack({ ok: true });
     } catch (err) {
       if (typeof ack === 'function') ack({ ok: false, message: err.message });

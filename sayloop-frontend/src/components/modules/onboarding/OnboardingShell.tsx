@@ -12,7 +12,7 @@ export default function OnboardingShell({ step, children }: Props) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-cream px-4 py-10">
       <Logo className="mb-6 h-9" />
-      <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-lg sm:p-8">
+      <div className="w-full max-w-lg rounded-3xl border border-ink/[0.06] bg-white p-6 shadow-xl sm:p-8">
         <div className="mb-2 flex justify-between text-[10px] font-bold uppercase tracking-wide text-ink/40">
           {STEP_LABELS.map((label, i) => (
             <span key={label} className={i === step ? 'text-brand' : ''}>

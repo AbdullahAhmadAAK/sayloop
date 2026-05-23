@@ -1,4 +1,5 @@
 import { getTopic, type TopicId } from '@/constants/topics';
+import StuckHelpPanel from '@/components/modules/sessions/StuckHelpPanel';
 
 type Props = {
   topic: TopicId;
@@ -46,6 +47,8 @@ export default function ConversationPanel({ topic, timerSeconds }: Props) {
           />
         ))}
       </div>
+
+      <StuckHelpPanel topic={topic} />
     </div>
   );
 }

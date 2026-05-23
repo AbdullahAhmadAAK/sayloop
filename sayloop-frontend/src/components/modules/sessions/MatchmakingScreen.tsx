@@ -6,23 +6,38 @@ type Props = {
 };
 
 export default function MatchmakingScreen({ onRetry }: Props) {
-  const { partnerName, waitingForPartner, sessionId } = useAppSelector((s) => s.session);
+  const { partnerName, waitingForPartner } = useAppSelector((s) => s.session);
 
   return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center text-center">
+    <div className="mx-auto flex min-h-[50vh] max-w-md flex-col items-center justify-center text-center animate-fade-in-up">
       <div className="h-14 w-14 animate-spin rounded-full border-4 border-brand/20 border-t-brand" />
-      <h2 className="mt-6 text-xl font-extrabold text-ink">Entering debate room</h2>
-      <p className="mt-2 max-w-sm text-sm text-ink/60">
+      <h2 className="mt-6 font-display text-xl font-extrabold text-ink">Opening debate room</h2>
+      <p className="mt-2 text-sm leading-relaxed text-ink/60">
         {waitingForPartner
-          ? `Waiting for ${partnerName || 'your partner'} to open the room…`
-          : 'Partner is here — starting camera, mic, and timer…'}
+          ? `Waiting for ${partnerName || 'your partner'} to connect…`
+          : `${partnerName || 'Partner'} is here. Starting camera, mic, and timer…`}
       </p>
-      <p className="mt-4 rounded-full bg-brand/10 px-4 py-2 text-xs font-bold text-brand">
-        Both players must land on this screen. Timer starts automatically.
-      </p>
-      {sessionId && onRetry && (
+
+      <ol className="mt-6 w-full space-y-2 rounded-2xl bg-white p-4 text-left text-sm shadow-sm">
+        <li className="flex gap-2">
+          <span className="text-brand">✓</span>
+          <span>Both players tapped &ldquo;Let&apos;s go!&rdquo;</span>
+        </li>
+        <li className="flex gap-2">
+          <span className={waitingForPartner ? 'text-ink/30' : 'text-brand'}>
+            {waitingForPartner ? '○' : '✓'}
+          </span>
+          <span>Both in the live room</span>
+        </li>
+        <li className="flex gap-2 text-ink/45">
+          <span>○</span>
+          <span>5-minute debate timer starts</span>
+        </li>
+      </ol>
+
+      {onRetry && (
         <Button variant="secondary" className="mt-6" onClick={onRetry}>
-          Reconnect to room
+          Reconnect
         </Button>
       )}
     </div>

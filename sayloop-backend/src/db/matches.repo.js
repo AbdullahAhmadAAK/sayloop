@@ -259,11 +259,9 @@ async function confirmReady(matchId, userId) {
       WHERE id = ${Number(matchId)}`;
     match.status = 'CONFIRMED';
     readyUsersByMatchId.delete(String(matchId));
-  } else if (status === 'CONFIRMED') {
-    match.status = 'CONFIRMED';
   }
 
-  return { match, bothReady: bothReady || status === 'CONFIRMED' };
+  return { match, bothReady };
 }
 
 module.exports = {

@@ -7,34 +7,32 @@ import MatchFoundModal from '@/components/modules/match/MatchFoundModal';
 import LevelUpModal from '@/components/modules/gamification/LevelUpModal';
 import { useMatchSocket, socketConfirmReady } from '@/hooks/useMatchSocket';
 import { useAppDispatch, useAppSelector } from '@/hooks/useAppDispatch';
-import { matchConfirmed } from '@/redux/slice/matchSlice';
-import { initSession } from '@/redux/slice/sessionSlice';
+import { setMyReady, setToast } from '@/redux/slice/matchSlice';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 function GlobalMatchModal() {
   const dispatch = useAppDispatch();
-  const navigate = useNavigate();
   const match = useAppSelector((s) => s.match);
   const [confirming, setConfirming] = useState(false);
 
   if (match.mode !== 'matched' || !match.activePartner || !match.matchId) return null;
 
   const handleConfirm = async () => {
-    if (!match.matchId) return;
+    if (!match.matchId || match.myReady) return;
     setConfirming(true);
     try {
       const res = await socketConfirmReady(match.matchId);
-      if (res.ok && res.bothReady && res.sessionId) {
-        dispatch(matchConfirmed());
+      if (!res.ok) {
+        dispatch(setToast(res.message || 'Could not confirm ready'));
+        return;
+      }
+      dispatch(setMyReady(true));
+      if (res.bothReady) {
+        dispatch(setToast('Both ready — opening debate room…'));
+      } else {
         dispatch(
-          initSession({
-            sessionId: res.sessionId,
-            partnerName: match.activePartner!.nickname,
-            topic: match.selectedTopic,
-          }),
+          setToast("You're ready! Waiting for your partner to tap Let's go!"),
         );
-        navigate('/session', { state: { sessionId: res.sessionId } });
       }
     } finally {
       setConfirming(false);
@@ -46,6 +44,7 @@ function GlobalMatchModal() {
       open
       partner={match.activePartner}
       partnerReady={match.partnerReady}
+      myReady={match.myReady}
       loading={confirming}
       onConfirm={handleConfirm}
     />

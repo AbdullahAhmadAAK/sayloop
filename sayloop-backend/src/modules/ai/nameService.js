@@ -15,8 +15,8 @@ function fallbackNicknames(firstName) {
   ];
 }
 
-async function suggestNicknames({ firstName, lastName }) {
-  const trimmed = (firstName || '').trim();
+async function suggestNicknames({ firstName, lastName, seed }) {
+  const trimmed = (seed || firstName || '').trim();
   if (!trimmed) {
     return { suggestions: fallbackNicknames('friend'), source: 'fallback' };
   }
@@ -30,10 +30,10 @@ async function suggestNicknames({ firstName, lastName }) {
 
   const prompt = `You generate fun, gender-neutral online debate nicknames for a language-learning app.
 
-Given the person's real first name: "${trimmed}"${lastName ? ` (family name hint only, do not use directly): "${lastName.trim()}"` : ''}
+The user typed this seed word or name: "${trimmed}"${lastName ? ` (optional context, do not copy): "${lastName.trim()}"` : ''}
 
 Rules:
-- Create 5 unique nicknames inspired by the first name's sound or letters (e.g. Saad → SajaStar, SaadLoop) — this is only an example style.
+- Create 5 unique nicknames inspired by the seed's sound or letters (e.g. seed "saad" → SajaStar, SaadLoop, SaadNova).
 - Do NOT reveal or imply gender (no Mr/Ms, prince/princess, king/queen, boy/girl).
 - No real full names. Max 16 characters. Alphanumeric only (letters and numbers).
 - Playful, friendly, suitable for teens and adults.

@@ -37,6 +37,11 @@ import {
   setWaitingForPartner,
 } from '@/redux/slice/sessionSlice';
 import { setXpFromServer } from '@/redux/slice/economySlice';
+import {
+  finalizeCoachSession,
+  initCoachSession,
+  loadPendingCoach,
+} from '@/lib/sessionTranscript';
 import type { DebateOutcome } from '@/types';
 import type { MatchRequest } from '@/types';
 
@@ -130,18 +135,25 @@ function bindSocketListeners(
 
   const onSessionStart = (payload: {
     sessionId: string;
-    partner: MatchRequest['requester'];
-    topic: TopicId;
+    partner?: MatchRequest['requester'];
+    topic?: string;
   }) => {
+    if (!payload.sessionId) return;
     dispatch(matchConfirmed());
+    const topic = normalizeTopicId(payload.topic ?? 'social_media');
+    initCoachSession({
+      sessionId: payload.sessionId,
+      topic,
+      partnerName: payload.partner?.nickname ?? 'Partner',
+    });
     dispatch(
       initSession({
         sessionId: payload.sessionId,
-        partnerName: payload.partner.nickname,
-        topic: normalizeTopicId(payload.topic),
+        partnerName: payload.partner?.nickname ?? 'Partner',
+        topic,
       }),
     );
-    navigate('/session', { state: { sessionId: payload.sessionId } });
+    navigate('/session', { state: { sessionId: payload.sessionId }, replace: true });
   };
 
   const onDebateStart = (payload: {
@@ -164,12 +176,28 @@ function bindSocketListeners(
     dispatch(setTimer(payload.remainingSeconds));
   };
 
+  let sessionEndHandled = false;
+
   const onSessionEnd = (payload: {
     outcome: DebateOutcome;
     xpEarned: number;
     partnerName?: string;
     topic?: string;
+    sessionId?: string;
   }) => {
+    if (sessionEndHandled) return;
+    sessionEndHandled = true;
+
+    const pending = loadPendingCoach();
+    const sid = payload.sessionId ?? pending?.sessionId;
+    if (sid) {
+      const duration =
+        pending && pending.startedAt
+          ? Math.max(1, Math.round((Date.now() - pending.startedAt) / 1000))
+          : 300;
+      finalizeCoachSession(sid, duration);
+    }
+
     dispatch(
       endSession({
         outcome: payload.outcome,
@@ -178,6 +206,9 @@ function bindSocketListeners(
         topic: payload.topic,
       }),
     );
+    if (!getPage().startsWith('/session')) {
+      navigate('/session', { replace: true });
+    }
   };
 
   const onEconomy = (payload: { xp: number; xpDelta: number }) => {
@@ -310,7 +341,7 @@ export function useMatchSocket() {
       unbindRef.current?.();
       unbindRef.current = null;
     };
-  }, [isLoaded, isSignedIn, dispatch, navigate]);
+  }, [isLoaded, isSignedIn, dispatch, navigate, location.pathname]);
 
   useEffect(() => {
     if (!isSignedIn) return;

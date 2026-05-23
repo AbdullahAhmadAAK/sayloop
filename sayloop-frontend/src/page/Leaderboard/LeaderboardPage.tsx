@@ -1,4 +1,5 @@
 import PageShell from '@/components/layout/PageShell';
+import PageHeader from '@/components/ui/PageHeader';
 import Avatar from '@/components/ui/Avatar';
 import { useAppSelector } from '@/hooks/useAppDispatch';
 
@@ -17,10 +18,8 @@ export default function LeaderboardPage() {
 
   return (
     <PageShell title="Leaderboard">
-      <div className="mx-auto max-w-lg">
-        <p className="mb-6 text-center text-sm font-bold text-ink/50">
-          Weekly rankings · resets Monday
-        </p>
+      <div className="mx-auto max-w-lg animate-fade-in-up">
+        <PageHeader title="Leaderboard" subtitle="Weekly rankings · resets every Monday" />
 
         <div className="mb-8 flex items-end justify-center gap-2 sm:gap-4">
           {[top3[1], top3[0], top3[2]].map((user, i) => {

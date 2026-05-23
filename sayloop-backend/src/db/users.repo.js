@@ -51,8 +51,7 @@ async function upsertFromClerk(clerkId, { email, firstName, lastName, pfpSource 
       UPDATE users SET
         email = COALESCE(${email}, email),
         first_name = COALESCE(${firstName}, first_name),
-        last_name = COALESCE(${lastName}, last_name),
-        pfp_source = COALESCE(${pfpSource}, pfp_source)
+        last_name = COALESCE(${lastName}, last_name)
       WHERE clerk_id = ${clerkId}
       RETURNING *`;
     return mapUser(rows[0]);

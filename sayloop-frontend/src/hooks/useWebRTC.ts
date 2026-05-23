@@ -13,7 +13,6 @@ const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun1.l.google.com:19302' },
 ];
 
-/** Max signals buffered while getUserMedia / PC setup is still in progress */
 const MAX_PENDING_SIGNALS = 80;
 
 export function useWebRTC() {
@@ -31,6 +30,7 @@ export function useWebRTC() {
   const pendingSignalsRef = useRef<SignalPayload[]>([]);
   const shouldOfferRef = useRef(false);
   const makingOfferRef = useRef(false);
+  const activeRef = useRef(false);
 
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [partnerConnected, setPartnerConnected] = useState(false);
@@ -54,27 +54,22 @@ export function useWebRTC() {
       try {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       } catch {
-        /* ignore stale candidates */
+        /* ignore */
       }
     }
   }, []);
 
-  const attachRemoteTrack = useCallback((track: MediaStreamTrack) => {
-    if (!remoteStreamRef.current) {
-      remoteStreamRef.current = new MediaStream();
-      setRemoteStream(remoteStreamRef.current);
-    }
-    const stream = remoteStreamRef.current;
-    if (!stream.getTrackById(track.id)) {
-      stream.addTrack(track);
-    }
+  const attachRemoteStream = useCallback((stream: MediaStream) => {
+    if (!stream.getTracks().length) return;
+    remoteStreamRef.current = stream;
+    setRemoteStream(stream);
     setPartnerConnected(true);
   }, []);
 
   const sendOffer = useCallback(async () => {
     const pc = pcRef.current;
     if (!pc || !shouldOfferRef.current || makingOfferRef.current) return;
-    if (pc.signalingState !== 'stable') return;
+    if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-local-offer') return;
 
     makingOfferRef.current = true;
     try {
@@ -94,19 +89,17 @@ export function useWebRTC() {
       const { signal } = payload;
 
       if (signal.sdp) {
-        const desc = new RTCSessionDescription(signal.sdp);
-        const isStable = pc.signalingState === 'stable';
         const isOffer = signal.sdp.type === 'offer';
 
-        if (isOffer && !isStable && pc.signalingState !== 'have-local-offer') {
+        if (isOffer && pc.signalingState === 'have-local-offer') {
           try {
             await pc.setLocalDescription({ type: 'rollback' } as RTCSessionDescriptionInit);
           } catch {
-            /* rollback unsupported — continue */
+            /* ignore */
           }
         }
 
-        await pc.setRemoteDescription(desc);
+        await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
         await flushPendingCandidates(pc);
 
         if (isOffer) {
@@ -156,6 +149,7 @@ export function useWebRTC() {
   }, [handleRemoteSignal]);
 
   const stopMedia = useCallback(() => {
+    activeRef.current = false;
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
     localStreamRef.current = null;
     pcRef.current?.close();
@@ -181,6 +175,7 @@ export function useWebRTC() {
 
     const boundSessionId = sessionId;
     let cancelled = false;
+    activeRef.current = true;
 
     const s = getSocket();
     if (!s) return;
@@ -202,7 +197,7 @@ export function useWebRTC() {
           video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: { echoCancellation: true, noiseSuppression: true },
         });
-        if (cancelled) {
+        if (cancelled || !activeRef.current) {
           stream.getTracks().forEach((t) => t.stop());
           return;
         }
@@ -220,14 +215,22 @@ export function useWebRTC() {
         stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
         pc.ontrack = (event) => {
-          const track = event.track;
-          if (track) {
-            attachRemoteTrack(track);
+          if (event.streams?.[0]) {
+            attachRemoteStream(event.streams[0]);
             return;
           }
-          const remote =
-            event.streams[0] ?? new MediaStream(event.track ? [event.track] : []);
-          remote.getTracks().forEach((t) => attachRemoteTrack(t));
+          if (event.track) {
+            if (!remoteStreamRef.current) {
+              attachRemoteStream(new MediaStream([event.track]));
+            } else {
+              const rs = remoteStreamRef.current;
+              if (!rs.getTrackById(event.track.id)) {
+                rs.addTrack(event.track);
+                setRemoteStream(rs);
+              }
+              setPartnerConnected(true);
+            }
+          }
         };
 
         pc.onicecandidate = (event) => {
@@ -237,34 +240,30 @@ export function useWebRTC() {
         };
 
         pc.onconnectionstatechange = () => {
-          const state = pc.connectionState;
-          if (state === 'connected') {
-            setPartnerConnected(true);
-          } else if (state === 'failed' && shouldOfferRef.current) {
-            try {
-              pc.restartIce();
-              sendOffer().catch(() => undefined);
-            } catch {
-              /* ignore */
-            }
+          if (pc.connectionState === 'connected') setPartnerConnected(true);
+          if (pc.connectionState === 'failed' && shouldOfferRef.current) {
+            pc.restartIce();
+            sendOffer().catch(() => undefined);
           }
         };
 
         pc.oniceconnectionstatechange = () => {
-          if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+          if (
+            pc.iceConnectionState === 'connected' ||
+            pc.iceConnectionState === 'completed'
+          ) {
             setPartnerConnected(true);
           }
         };
 
         await flushPendingSignals();
-
-        if (cancelled) return;
+        if (cancelled || !activeRef.current) return;
 
         s.emit('session:webrtc-ready', { sessionId: boundSessionId });
         dispatch(setMediaError(null));
 
         if (shouldOfferRef.current) {
-          sendOffer().catch((err) => console.warn('[webrtc] initial offer error', err));
+          await sendOffer();
         }
       } catch (err) {
         const msg =
@@ -279,22 +278,21 @@ export function useWebRTC() {
 
     const retryOffer = setInterval(() => {
       const pc = pcRef.current;
-      if (!pc || !shouldOfferRef.current) return;
-      const needsOffer =
+      if (!pc || !shouldOfferRef.current || !activeRef.current) return;
+      if (
         pc.signalingState === 'stable' &&
         !pc.currentRemoteDescription &&
-        pc.connectionState !== 'connected';
-      if (needsOffer) {
+        pc.connectionState !== 'connected'
+      ) {
         sendOffer().catch(() => undefined);
       }
-    }, 4000);
+    }, 5000);
 
     return () => {
       cancelled = true;
       clearInterval(retryOffer);
       s.off('session:signal', onSignal);
       s.off('session:peer-webrtc-ready', onPeerReady);
-      stopMedia();
     };
   }, [
     phase,
@@ -304,15 +302,14 @@ export function useWebRTC() {
     sendOffer,
     queueOrHandleSignal,
     flushPendingSignals,
-    attachRemoteTrack,
-    stopMedia,
+    attachRemoteStream,
   ]);
 
   useEffect(() => {
-    if (phase === 'ended' || !sessionId) {
+    if (phase !== 'active') {
       stopMedia();
     }
-  }, [phase, sessionId, stopMedia]);
+  }, [phase, stopMedia]);
 
   useEffect(() => {
     const stream = localStreamRef.current;

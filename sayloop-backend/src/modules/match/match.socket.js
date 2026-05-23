@@ -129,7 +129,8 @@ function registerMatchHandlers(io, socket) {
       const receiverId = Number(match.receiverId);
       const partnerId = uid === requesterId ? receiverId : requesterId;
 
-      emitToUser(io, partnerId, 'match:partner-ready', { matchId });
+      emitToUser(io, partnerId, 'match:partner-ready', { matchId, bothReady: false });
+      socket.emit('match:partner-ready', { matchId, bothReady: false });
 
       if (bothReady) {
         const sessionRoom = match.sessionId;

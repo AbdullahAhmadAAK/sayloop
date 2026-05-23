@@ -90,14 +90,6 @@ export default function OnboardingPage() {
       });
 
       try {
-        const res = await fetch(avatarUrl);
-        const blob = await res.blob();
-        await user.setProfileImage({ file: new File([blob], 'avatar.svg', { type: 'image/svg+xml' }) });
-      } catch {
-        // Clerk image upload optional; metadata avatarUrl still works in UI
-      }
-
-      try {
         await updateUserProfile({
           nickname: nickname.trim(),
           pfpSource: avatarUrl,
@@ -113,6 +105,7 @@ export default function OnboardingPage() {
         console.warn('[onboarding] Saved to Clerk; database update failed:', err);
       }
 
+      await user.reload();
       navigate('/home');
     } finally {
       setSaving(false);

@@ -1,8 +1,10 @@
 import { NavLink } from 'react-router-dom';
-import { UserButton } from '@clerk/react';
+import { useUser } from '@clerk/react';
 import Logo from '@/components/ui/Logo';
 import Badge from '@/components/ui/Badge';
-import { clerkAppearance } from '@/components/auth/ClerkAuthControls';
+import Avatar from '@/components/ui/Avatar';
+import { getDisplayName } from '@/hooks/useOnboardingComplete';
+import { useUserAvatar } from '@/hooks/useUserAvatar';
 import { useAppSelector } from '@/hooks/useAppDispatch';
 
 const links = [
@@ -16,6 +18,8 @@ const links = [
 ];
 
 export default function Sidebar() {
+  const { user } = useUser();
+  const avatarUrl = useUserAvatar();
   const { streak, xp, levelTitle } = useAppSelector((s) => s.economy);
   const pending = useAppSelector((s) => s.match.pendingRequestCount);
 
@@ -62,9 +66,16 @@ export default function Sidebar() {
             <span className="font-bold text-ink">{xp} XP</span> · {levelTitle}
           </div>
         </div>
-        <div className="flex justify-center">
-          <UserButton afterSignOutUrl="/" appearance={clerkAppearance} />
-        </div>
+        <NavLink
+          to="/profile"
+          className="flex items-center gap-3 rounded-2xl bg-white/80 p-2.5 transition hover:bg-white"
+        >
+          <Avatar src={avatarUrl} alt={getDisplayName(user)} size="md" ring />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-extrabold text-ink">{getDisplayName(user)}</p>
+            <p className="text-[10px] font-bold text-ink/45">Profile & settings</p>
+          </div>
+        </NavLink>
       </div>
     </aside>
   );

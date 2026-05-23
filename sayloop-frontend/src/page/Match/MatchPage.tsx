@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import PageShell from '@/components/layout/PageShell';
+import PageHeader from '@/components/ui/PageHeader';
 import TopicPicker from '@/components/modules/match/TopicPicker';
 import WaitingScreen from '@/components/modules/match/WaitingScreen';
 import IncomingRequests from '@/components/modules/match/IncomingRequests';
@@ -127,7 +128,11 @@ export default function MatchPage() {
 
   return (
     <PageShell title="Challenge a partner" hideRight>
-      <div className="mx-auto max-w-lg pb-32">
+      <div className="mx-auto max-w-lg pb-32 animate-fade-in-up">
+        <PageHeader
+          title="Challenge a partner"
+          subtitle="Pick someone online, choose a topic, and send a duel invite."
+        />
         <MatchLiveBar />
         <MatchHowItWorks />
 

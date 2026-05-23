@@ -1,5 +1,6 @@
 import { useAppDispatch, useAppSelector } from '@/hooks/useAppDispatch';
 import { useSessionRoom } from '@/hooks/useSessionRoom';
+import { useSpeechCapture } from '@/hooks/useSpeechCapture';
 import { useWebRTC } from '@/hooks/useWebRTC';
 import { toggleCamera, toggleMute } from '@/redux/slice/sessionSlice';
 import VideoArea from '@/components/modules/sessions/VideoArea';
@@ -11,6 +12,7 @@ export default function SessionScreen() {
   const session = useAppSelector((s) => s.session);
   const { offerDraw, acceptDraw, declineDraw, resign } = useSessionRoom();
   const { localVideoRef, remoteVideoRef, remoteStream, partnerConnected } = useWebRTC();
+  useSpeechCapture(session.phase === 'active', session.sessionId);
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 pb-8">
@@ -32,11 +34,23 @@ export default function SessionScreen() {
         drawOfferIncoming={session.drawOfferIncoming}
         onToggleMute={() => dispatch(toggleMute())}
         onToggleCamera={() => dispatch(toggleCamera())}
-        onOfferDraw={offerDraw}
         onAcceptDraw={acceptDraw}
         onDeclineDraw={declineDraw}
+        onOfferDraw={() => {
+          if (
+            window.confirm(
+              'Offer a draw? If your partner accepts, you both get +25 XP.',
+            )
+          ) {
+            offerDraw();
+          }
+        }}
         onResign={() => {
-          if (window.confirm('Resign? Your opponent gets +50 XP and you lose 50.')) {
+          if (
+            window.confirm(
+              'Resign this debate? Your opponent wins +50 XP and you lose 50 XP.',
+            )
+          ) {
             resign();
           }
         }}

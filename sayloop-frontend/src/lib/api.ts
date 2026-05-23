@@ -53,11 +53,44 @@ export async function updateUserProfile(body: Record<string, unknown>) {
   return data;
 }
 
-export async function fetchNicknameSuggestions(firstName: string, lastName?: string) {
+export async function fetchNicknameSuggestions(seed: string, lastName?: string) {
   const { data } = await api.post<{
     success: boolean;
     suggestions: string[];
     source: 'gemini' | 'fallback';
-  }>('/ai/nickname-suggestions', { firstName, lastName });
+  }>('/ai/nickname-suggestions', { seed, firstName: seed, lastName });
+  return data;
+}
+
+export async function fetchStuckPrompts(topicId: string, refresh = false) {
+  const { data } = await api.post<{
+    success: boolean;
+    prompts: string[];
+    source: 'gemini' | 'fallback';
+  }>('/ai/stuck-prompts', { topicId, refresh });
+  return data;
+}
+
+export type CoachingAnalyzeResult = {
+  success: boolean;
+  coachingNarrative: string;
+  metrics?: {
+    wordCount: number;
+    wpm: number;
+    wpmLabel: string;
+    fillerTotal: number;
+    durationSeconds: number;
+  };
+  source: 'openai' | 'fallback';
+};
+
+export async function fetchCoachingAnalyze(body: {
+  transcript: string;
+  topicId: string;
+  durationSeconds: number;
+}) {
+  const { data } = await api.post<CoachingAnalyzeResult>('/ai/coaching-analyze', body, {
+    timeout: 45000,
+  });
   return data;
 }

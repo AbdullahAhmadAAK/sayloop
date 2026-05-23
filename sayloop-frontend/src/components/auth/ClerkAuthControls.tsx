@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
-import { Show, UserButton } from '@clerk/react';
+import { Show } from '@clerk/react';
 import Button from '@/components/ui/Button';
+import AppUserMenu from '@/components/auth/AppUserMenu';
 
 const clerkAppearance = {
   variables: {
@@ -31,7 +32,7 @@ export default function ClerkAuthControls({ signUpLabel = 'Get started' }: Props
         </div>
       </Show>
       <Show when="signed-in">
-        <UserButton afterSignOutUrl="/" appearance={clerkAppearance} />
+        <AppUserMenu compact />
       </Show>
     </>
   );

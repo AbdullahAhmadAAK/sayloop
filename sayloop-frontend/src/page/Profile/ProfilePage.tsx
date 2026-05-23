@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useUser, SignOutButton } from '@clerk/react';
 import PageShell from '@/components/layout/PageShell';
+import PageHeader from '@/components/ui/PageHeader';
 import Avatar from '@/components/ui/Avatar';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -28,8 +29,9 @@ export default function ProfilePage() {
 
   return (
     <PageShell title="Profile">
-      <div className="mx-auto max-w-2xl">
-        <div className="rounded-3xl bg-gradient-to-br from-brand/15 to-cream p-6 text-center shadow-sm">
+      <div className="mx-auto max-w-2xl animate-fade-in-up">
+        <PageHeader title="Your profile" subtitle="Stats, achievements, and account" />
+        <div className="rounded-3xl border border-ink/[0.06] bg-gradient-to-br from-brand/15 to-white p-6 text-center shadow-sm">
           <Avatar
             src={avatarUrl}
             alt={getDisplayName(user)}

@@ -5,14 +5,20 @@ export function getUserAvatarUrl(user: ReturnType<typeof useUser>['user']): stri
   if (!user) {
     return 'https://api.dicebear.com/7.x/adventurer/svg?seed=guest';
   }
+
   const meta = user.unsafeMetadata as {
     avatarUrl?: string;
     avatarStyle?: AvatarStyle;
     avatarSeed?: string;
+    onboardingComplete?: boolean;
   };
+
   if (meta.avatarUrl) return meta.avatarUrl;
   if (meta.avatarStyle && meta.avatarSeed) {
     return getAvatarUrl(meta.avatarStyle, meta.avatarSeed);
+  }
+  if (meta.onboardingComplete) {
+    return getAvatarUrl('adventurer', user.id || 'default');
   }
   if (user.imageUrl) return user.imageUrl;
   return getAvatarUrl('adventurer', user.id || 'default');

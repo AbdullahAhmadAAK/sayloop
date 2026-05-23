@@ -24,6 +24,7 @@ interface MatchState {
   sessionId: string | null;
   matchId: string | null;
   partnerReady: boolean;
+  myReady: boolean;
   socketConnected: boolean;
   toast: string | null;
 }
@@ -45,6 +46,7 @@ const initialState: MatchState = {
   sessionId: null,
   matchId: null,
   partnerReady: false,
+  myReady: false,
   socketConnected: false,
   toast: null,
 };
@@ -93,6 +95,7 @@ const matchSlice = createSlice({
       state.sending = false;
       state.exiting = false;
       state.partnerReady = false;
+      state.myReady = false;
     },
     setMode(state, action: PayloadAction<MatchMode>) {
       state.mode = action.payload;
@@ -107,12 +110,16 @@ const matchSlice = createSlice({
       state.mode = 'matched';
       state.notification = null;
       state.partnerReady = false;
+      state.myReady = false;
     },
     matchConfirmed(state) {
       state.mode = 'confirmed';
     },
     setPartnerReady(state, action: PayloadAction<boolean>) {
       state.partnerReady = action.payload;
+    },
+    setMyReady(state, action: PayloadAction<boolean>) {
+      state.myReady = action.payload;
     },
     resetMatchFlow(state) {
       state.mode = 'browse';
@@ -122,6 +129,7 @@ const matchSlice = createSlice({
       state.sending = false;
       state.exiting = false;
       state.partnerReady = false;
+      state.myReady = false;
       if (state.partners.length && !state.selectedPartnerId) {
         state.selectedPartnerId = state.partners[0].id;
       }
@@ -166,6 +174,7 @@ export const {
   matchAccepted,
   matchConfirmed,
   setPartnerReady,
+  setMyReady,
   resetMatchFlow,
   setNotification,
   setPendingRequests,

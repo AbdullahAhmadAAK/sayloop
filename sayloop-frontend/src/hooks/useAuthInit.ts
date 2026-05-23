@@ -26,6 +26,12 @@ export function useAuthInit() {
 
     (async () => {
       try {
+        const meta = user.unsafeMetadata as {
+          avatarUrl?: string;
+          onboardingComplete?: boolean;
+        };
+        const hasCustomAvatar = Boolean(meta.avatarUrl || meta.onboardingComplete);
+
         const { data } = await api.post<{
           success: boolean;
           user: { id: number; clerkId: string; onboardingComplete: boolean };
@@ -33,7 +39,7 @@ export function useAuthInit() {
           email: user.primaryEmailAddress?.emailAddress,
           firstName: user.firstName,
           lastName: user.lastName,
-          pfpSource: user.imageUrl,
+          ...(hasCustomAvatar ? {} : { pfpSource: user.imageUrl }),
         });
 
         if (cancelled) return;
